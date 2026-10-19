@@ -17,16 +17,14 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from yuxiaoer.core import config
-from yuxiaoer.seller.notifications.alerts import AlertService
 from yuxiaoer.buyer.conversation.bargain import decide as bargain_decide
-from yuxiaoer.seller.confirmations import ConfirmationService
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
 from yuxiaoer.buyer.conversation.gateway import Decision, classify
 from yuxiaoer.shared.knowledge import KnowledgeService
+from yuxiaoer.shared.ports import AlertPort, MessagingPort
 from yuxiaoer.shared.toolbox import ToolBox
 from yuxiaoer.core.llm import LLMClient
-from yuxiaoer.seller.conversation.messaging import MessagingService
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.state import transition_order
 from yuxiaoer.core.util import dumps, human_time, iso, loads, new_id, now_utc, parse_iso, snippet, yuan
@@ -51,11 +49,11 @@ class BuyerAgent:
         db: Database,
         bus: EventBus,
         knowledge: KnowledgeService,
-        messaging: MessagingService,
-        alerts: AlertService,
+        messaging: MessagingPort,
+        alerts: AlertPort,
         settings: SettingsService,
         llm: LLMClient,
-        confirmations: ConfirmationService,
+        confirmations: Any,
     ):
         self.db = db
         self.bus = bus

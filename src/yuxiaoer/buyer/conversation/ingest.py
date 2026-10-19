@@ -13,9 +13,9 @@ from typing import Any
 
 from yuxiaoer.buyer.conversation.agent import BuyerAgent
 from yuxiaoer.core.db import Database
-from yuxiaoer.seller.conversation.messaging import MessagingService
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.util import dumps, iso, loads
+from yuxiaoer.shared.ports import MessagingPort
 
 log = logging.getLogger("yuxiaoer.ingest")
 
@@ -24,7 +24,7 @@ class IngestService:
     def __init__(
         self,
         db: Database,
-        messaging: MessagingService,
+        messaging: MessagingPort,
         buyer: BuyerAgent,
         settings: SettingsService,
     ):
