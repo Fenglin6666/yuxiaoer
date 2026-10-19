@@ -135,26 +135,33 @@ Agent 会自动补：
 
 ```text
 src/yuxiaoer/
-  core/                      共享底座
+  core/                      共享底座（不依赖任何业务域）
     config.py  db.py  util.py  events.py  state.py  llm.py
     settings_service.py  seed.py
+  shared/                    跨域共享（买卖双方都会用）
+    knowledge.py             商品/FAQ 检索、同步、墓碑
+    toolbox.py               工具调用记录（步数上限/重复检测）
   buyer/                     买家域
     conversation/
       gateway.py             入口分类
       bargain.py             议价规则
       agent.py               买家 Agent
       ingest.py              消息合并/入队
-    knowledge/
-      service.py             商品/FAQ 检索、同步、墓碑
   seller/                    卖家域
-    agent.py                 店主对话 Agent
+    agent.py                 入口路由 + 回复（薄装配）
+    constants.py             意图词表/商品类型提示词
+    commands/                指令实现（按职责拆成 mixin）
+      confirm.py             确认门 + 条件执行
+      listing.py             上架参数/预览卡/批量发布
+      actions.py             下架/改价/发货/订单/日报/接管
+      parsing.py             商品匹配/价格/成色/分类兜底
     confirmations.py         写操作确认门
     write_queue.py           串行写队列
     account/accounts.py      登录/保活/多账号
     commerce/
       orders.py              订单、履约、退款
       delivery.py            卡券自动发货
-    conversation/messaging.py 会话/消息/接管
+    conversation/messaging.py 会话/消息/接管/outbox
     operations/
       patrol.py  metrics.py  replay.py  risk.py  eval.py
     platform/
@@ -164,13 +171,17 @@ src/yuxiaoer/
       alerts.py  notifications.py
       email_actions.py  email_gateway.py
     integrations/external_api.py
-  api.py                     控制台 API 路由
+  api/                       控制台 API（按领域拆分）
+    __init__.py              聚合 /api 路由
+    system.py  conversations.py  seller_chat.py  catalog.py
+    orders.py  accounts.py  notify.py  ops.py  settings.py
+    _models.py  _views.py    请求模型 / 响应序列化
   runtime.py                 服务装配/生命周期
   main.py                    FastAPI 入口
   static/                    单页控制台
 ```
 
-买方域只处理消息理解、议价、知识检索与买家回复；卖家域处理账号、商品、订单、发货、通知、平台写操作。`core/` 只放两边共享的基础设施。
+买方域只处理消息理解、议价、知识检索与买家回复；卖家域处理账号、商品、订单、发货、通知、平台写操作。`core/` 只放两边共享的基础设施，`shared/` 放跨域但不属于任何一方的组件（知识库、工具调用记录）。
 
 买家真实消息链路：
 

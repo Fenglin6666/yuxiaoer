@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "yuxiaoer"
 version = "0.3.1"
 description = "鱼小二 · 闲鱼托管客服 Agent（R1 功能版）"
@@ -13,6 +13,7 @@ dependencies = [
     "qrcode>=8.0",
     "pillow>=10.0",
     "msgpack>=1.0",
+    "websockets>=17.0",
 ]
 
 [build-system]

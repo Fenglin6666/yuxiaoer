@@ -1,8 +1,8 @@
 # 鱼小二 · 架构梳理
 
-> 梳理日期：2026-10-18 ｜ 版本 v0.3.1 ｜ 依据：源码实读 + 运行实例 `/api/status` + 数据库实况
+> 梳理日期：2026-10-18 ｜ 结构重整：2026-10-19（api 包 / seller mixin / shared 层）｜ 版本 v0.3.1
 >
-> 规模：Python 12,193 行 / 前端 2,757 行 / 56 个模块 / 80 个 HTTP 路由 / 20 个单测（全绿）
+> 规模：Python 12,498 行 / 前端约 2,826 行 / 74 个模块 / 82 个 HTTP 操作 / 20 个单测（全绿）
 
 ---
 
@@ -32,24 +32,31 @@
 ## 3. 分层结构
 
 ```
-api.py (1,240 行, 74 路由)      external_api.py (638 行, 6 路由)
-        │                                │
-        └────────── runtime.py (279 行, 唯一装配点) ──────────┐
+api/ 包（9 个领域路由 + 2 个内部模块）      external_api.py (639 行, 6 路由)
+  system · conversations · seller_chat
+  catalog · orders · accounts
+  notify · ops · settings
+        │
+        └────────── runtime.py (280 行, 唯一装配点) ──────────┐
                                                               │
-  buyer/  (1,393 行)                    seller/  (7,879 行)   │
-  ├ conversation/gateway.py  规则分类    ├ agent.py      指令路由 + 执行
-  ├ conversation/ingest.py   合并窗口    ├ confirmations.py 确认门
-  ├ conversation/agent.py    买家 Agent  ├ write_queue.py   串行写
-  ├ conversation/bargain.py  议价引擎    ├ commerce/     订单/发货
-  └ knowledge/service.py     FTS 检索    ├ operations/   值守/风控/评测/回放
+  core/ (1,351 行)          shared/ (376 行)                  │
+  config · db · state       knowledge · toolbox               │
+  events · llm · settings                                     │
+  util · seed                                                 │
+                                                              │
+  buyer/ (1,042 行)                    seller/ (8,037 行)     │
+  ├ conversation/gateway.py  规则分类    ├ agent.py      入口/路由（181 行）
+  ├ conversation/ingest.py   合并窗口    ├ commands/     confirm·listing·actions·parsing
+  ├ conversation/agent.py    买家 Agent  ├ confirmations.py 确认门
+  └ conversation/bargain.py  议价引擎    ├ commerce/     订单/发货
+                                        ├ operations/   值守/风控/评测/回放
                                         ├ notifications/ 告警/邮件
-  core/ (1,342 行)                      └ platform/xianyu/ 原生协议
-  config · db · state · events · llm · settings · util · seed
+                                        └ platform/xianyu/ 原生协议
 ```
 
-**分层意图**：`core` 只放共享底座（不反向依赖任何域，已核实无违规）；`buyer` 只做消息理解与回复；`seller` 承担账号、商品、订单、发货、通知、平台写操作。
+**分层意图**：`core` 只放共享底座（不反向依赖任何域，已核实无违规）；`shared` 放跨域但不属于任何一方的组件（知识库、工具调用记录）；`buyer` 只做消息理解与回复；`seller` 承担账号、商品、订单、发货、通知、平台写操作。
 
-**分层实况（与意图不符，见 §9）**：`buyer → seller` 有 4 处依赖（`AlertService`、`ConfirmationService`、`MessagingService`），`seller → buyer` 有 5 处（`ToolBox`、`KnowledgeService`、`BuyerAgent`）。两个域实际是**双向耦合**，只是目录分开。
+**分层实况**：`buyer → seller` 仍有 4 处（`AlertService`、`ConfirmationService`、`MessagingService`），属于买家回复链路的必要依赖；`seller → buyer` 的运行时依赖为 0（`eval.py` 仅 `TYPE_CHECKING` 类型引用）。原先"目录级隔离"的一半问题已消除。
 
 ---
 
@@ -178,13 +185,13 @@ order: new → paid → shipped → delivered → done
 
 | # | 问题 | 证据 | 影响 |
 |---|---|---|---|
-| 1 | **无任何鉴权** | `api.py` 无 middleware / Depends；80 个路由全裸 | 监听 127.0.0.1 时风险可控；一旦按 `YUXIAOER_PUBLIC_URL` 暴露到局域网/公网，任何人可发消息、改价、上架、看 Cookie |
-| 2 | **两个巨型 Agent 文件** | `seller/agent.py` 1,190 行；`buyer/agent.py` 688 行 | 指令路由、业务执行、文案拼装、参数补全混在一个类；改一个意图要读整文件 |
-| 3 | **域边界是目录级的** | `buyer` 4 处依赖 `seller`，`seller` 5 处依赖 `buyer` | README 声称的双域隔离不成立；`ToolBox` 定义在 buyer 却被 seller 复用 |
+| 1 | **无任何鉴权** | `api/` 包无 middleware / Depends；82 个 HTTP 操作全裸 | 监听 127.0.0.1 时风险可控；一旦按 `YUXIAOER_PUBLIC_URL` 暴露到局域网/公网，任何人可发消息、改价、上架、看 Cookie |
+| 2 | ~~两个巨型 Agent 文件~~ **已处理** | 2026-10-19：`seller/agent.py` 1,191 → 181 行，拆成 `commands/` 4 个 mixin；`api.py` 1,241 行 → `api/` 9 个领域路由 | 剩余热点：`buyer/conversation/agent.py` 637 行 |
+| 3 | ~~域边界是目录级的~~ **已部分处理** | `ToolBox`/`KnowledgeService` 迁到 `shared/`；`seller → buyer` 运行时依赖归零；`buyer → seller` 仍有 4 处（告警/确认/消息） | 剩余 4 条是买家回复链路的必要依赖，下一步可用协议接口反转 |
 | 4 | **事件处理器无重试** | `events._dispatch` 失败仅标 failed + 告警 | `order.paid` 处理器异常 → 自动发货静默丢失，只能人工补发 |
 | 5 | **前端单文件 1,897 行** | `static/app.js` 无模块化、无构建 | 9 个页面共享一个全局 `S` 状态；后续加页面成本递增 |
 | 6 | **依赖声明不全** | `websockets` 未在 `pyproject.toml` / `requirements.txt` 中直接声明，靠 `uvicorn[standard]` 间接带入 | 换部署方式（如 `uvicorn` 非 standard）会运行时报错 |
-| 7 | **示例配置含真实密钥** | `.env.example` 里 `AMAP_KEY=ef9c...` 是有效值 | `.gitignore` 只忽略 `.env`，示例文件会被提交 |
+| 7 | ~~示例配置含真实密钥~~ **已处理** | 2026-10-19：`.env.example` 的 `AMAP_KEY` 已清空 | 仓库已初始化 git 并推到私有远端 |
 | 8 | **关键参数硬编码** | 频控 2/min、步数 6/8、合并窗口默认值在 `config.py`，不在 `EDITABLE_SETTINGS` | 调参要改代码重启 |
 | 9 | **WAL 无显式 checkpoint** | 全库搜不到 `wal_checkpoint`；实测 db 356KB / wal 4.1MB | 当前水位在 SQLite 自动 checkpoint（1000 页）附近，尚未失控；长期高写入需关注 |
 | 10 | **评测闭环空转** | `eval_cases` 表 0 条；删除演示数据时把用例也删了 | `POST /api/eval/run` 恒返回 0/0，评测能力等于不存在 |
@@ -208,8 +215,8 @@ risk 未熔断 · queue 正常 · outbox 无积压 · LLM 规则模式
 
 ## 11. 如果要继续演进，优先级建议
 
-1. **加鉴权**（本机 token 或反代 Basic Auth）——这是唯一"一条命令就能被打穿"的风险
-2. **补 3 条评测用例**（议价守住底价 / 站外引流静默 / 售后转人工），把 `eval_cases` 从空表填起来
-3. **拆 seller/agent.py**：`intent_router.py`（正则路由）+ `listing.py`（发布参数补全）+ `commands.py`（改价/下架/发货）
-4. **事件处理器加重试**：`events.attempts` 已有字段，补 3 次退避即可
-5. **把 `ToolBox` 移到 `core/`**，切断 buyer↔seller 的第一条反向依赖
+1. **拆前端 `static/app.js`**（1,898 行、90 个函数、全局 `S`）：按 `js/core.js` + `js/pages/*.js` 走原生 ESM，无构建；拆完需要浏览器逐页回归
+2. **加鉴权**（本机 token 或反代 Basic Auth）——唯一"一条命令就能被打穿"的风险
+3. **事件处理器加重试**：`events.attempts` 已有字段，补 3 次退避即可
+4. **补评测用例**（议价守住底价 / 站外引流静默 / 售后转人工），把 `eval_cases` 从空表填起来
+5. **补测试**：当前 20 个单测覆盖 12.5k 行；优先给 `api/` 路由加 ASGI 冒烟、给 `commands/` 加参数补全测试
