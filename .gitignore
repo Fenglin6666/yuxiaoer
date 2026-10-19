@@ -22,3 +22,7 @@ scratch/
 Thumbs.db
 .idea/
 .vscode/
+
+# local agent memory / one-off auth artifacts
+.workbuddy-ai/
+_gh_*
