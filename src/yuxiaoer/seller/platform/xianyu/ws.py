@@ -20,6 +20,7 @@ import msgpack
 import websockets
 
 from yuxiaoer.core import config
+
 from .mtop import generate_mid, generate_uuid
 
 log = logging.getLogger("yuxiaoer.xianyu.ws")

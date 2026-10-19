@@ -11,18 +11,17 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from yuxiaoer.core import config
-from yuxiaoer.seller.notifications.alerts import AlertService
-from yuxiaoer.seller.platform.channels import BaseChannel
 from yuxiaoer.core.db import Database
-from yuxiaoer.seller.commerce.delivery import DeliveryService
 from yuxiaoer.core.events import EventBus
-from yuxiaoer.shared.knowledge import KnowledgeService
-from yuxiaoer.seller.conversation.messaging import MessagingService
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.state import transition_item, transition_order
-from yuxiaoer.core.util import dumps, iso, new_id, snippet, yuan
+from yuxiaoer.core.util import dumps, iso, new_id, yuan
+from yuxiaoer.seller.commerce.delivery import DeliveryService
+from yuxiaoer.seller.conversation.messaging import MessagingService
+from yuxiaoer.seller.notifications.alerts import AlertService
+from yuxiaoer.seller.platform.channels import BaseChannel
 from yuxiaoer.seller.write_queue import WriteQueue
+from yuxiaoer.shared.knowledge import KnowledgeService
 
 log = logging.getLogger("yuxiaoer.orders")
 

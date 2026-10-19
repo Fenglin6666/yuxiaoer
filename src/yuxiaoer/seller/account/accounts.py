@@ -22,11 +22,11 @@ from datetime import timedelta
 from typing import Any
 
 from yuxiaoer.core import config
-from yuxiaoer.seller.notifications.alerts import AlertService
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.util import dumps, human_time, iso, loads, new_id, now_utc, parse_iso
+from yuxiaoer.seller.notifications.alerts import AlertService
 
 log = logging.getLogger("yuxiaoer.accounts")
 
@@ -204,7 +204,10 @@ class AccountService:
         return await self._refresh_native(account, kind=kind)
 
     async def _refresh_native(self, account: dict[str, Any], *, kind: str = "manual") -> dict[str, Any]:
-        from yuxiaoer.seller.platform.xianyu.session import fetch_im_token, renew_cookies
+        from yuxiaoer.seller.platform.xianyu.session import (
+            fetch_im_token,
+            renew_cookies,
+        )
 
         now = now_utc()
         try:

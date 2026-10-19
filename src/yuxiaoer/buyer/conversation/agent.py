@@ -8,26 +8,24 @@ get_item_info / get_order_status / create_refund_request / escalate_human。
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import logging
 import re
-import time
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
-from yuxiaoer.core import config
 from yuxiaoer.buyer.conversation.bargain import decide as bargain_decide
+from yuxiaoer.buyer.conversation.gateway import Decision, classify
+from yuxiaoer.core import config
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
-from yuxiaoer.buyer.conversation.gateway import Decision, classify
-from yuxiaoer.shared.knowledge import KnowledgeService
-from yuxiaoer.shared.ports import AlertPort, MessagingPort
-from yuxiaoer.shared.toolbox import ToolBox
 from yuxiaoer.core.llm import LLMClient
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.state import transition_order
-from yuxiaoer.core.util import dumps, human_time, iso, loads, new_id, now_utc, parse_iso, snippet, yuan
+from yuxiaoer.core.util import dumps, iso, new_id, now_utc, parse_iso, snippet, yuan
+from yuxiaoer.shared.knowledge import KnowledgeService
+from yuxiaoer.shared.ports import AlertPort, MessagingPort
+from yuxiaoer.shared.toolbox import ToolBox
 
 log = logging.getLogger("yuxiaoer.buyer")
 

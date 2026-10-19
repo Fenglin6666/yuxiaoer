@@ -9,8 +9,9 @@ from uuid import uuid4
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from ..core import config
-from ..core.util import dumps, iso, loads, snippet
+from ..core.util import loads, snippet
 from ..runtime import runtime
+from ._helpers import audit
 from ._models import ManualReplyIn
 from ._views import _conv_out, _full_item, _message_out, _scheduled_reply
 
@@ -98,10 +99,7 @@ async def manual_reply(conversation_id: str, payload: ManualReplyIn) -> dict[str
         raise HTTPException(400, result.get("error") or "发送失败")
     await runtime.messaging.set_handoff(conversation_id, "店主手动接管", minutes=120)
     await runtime.alerts.ack_related(kind="handoff", conversation_id=conversation_id)
-    await runtime.db.execute(
-        "INSERT INTO audit_logs(ts,actor,action,target,detail_json,result) VALUES(?,?,?,?,?,?)",
-        (iso(), "owner", "manual_reply", conversation_id, dumps({"text": snippet(payload.text, 120)}), "ok"),
-    )
+    await audit("manual_reply", conversation_id, {"text": snippet(payload.text, 120)}, result="ok")
     return {"ok": True, "message": await _message_out(result["message"])}
 
 

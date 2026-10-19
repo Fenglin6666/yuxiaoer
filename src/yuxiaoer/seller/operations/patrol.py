@@ -12,18 +12,26 @@ import re
 from datetime import timedelta
 from typing import Any
 
-from yuxiaoer.seller.notifications.alerts import AlertService
-from yuxiaoer.seller.platform.channels import BaseChannel
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
-from yuxiaoer.shared.knowledge import KnowledgeService
-from yuxiaoer.seller.conversation.messaging import MessagingService
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.util import (
-    dumps, human_time, iso, loads, local_now, new_id, next_local_time, now_utc,
-    parse_iso, snippet, start_of_local_day, yuan,
+    dumps,
+    human_time,
+    iso,
+    loads,
+    local_now,
+    next_local_time,
+    now_utc,
+    snippet,
+    start_of_local_day,
+    yuan,
 )
+from yuxiaoer.seller.conversation.messaging import MessagingService
+from yuxiaoer.seller.notifications.alerts import AlertService
+from yuxiaoer.seller.platform.channels import BaseChannel
 from yuxiaoer.seller.write_queue import WriteQueue
+from yuxiaoer.shared.knowledge import KnowledgeService
 
 log = logging.getLogger("yuxiaoer.patrol")
 

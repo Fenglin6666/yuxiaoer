@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.llm import LLMClient
-from yuxiaoer.core.util import dumps, iso, loads, new_id, now_utc, yuan
+from yuxiaoer.core.util import dumps, iso, loads, new_id
 
 if TYPE_CHECKING:
     from yuxiaoer.buyer.conversation.agent import BuyerAgent

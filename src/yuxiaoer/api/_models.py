@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+
 class SellerMessageIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     images: list[str] = Field(default_factory=list, max_length=9)

@@ -7,13 +7,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
 import httpx
 
 from yuxiaoer.core import config
+
 from .mtop import MtopClient, merge_set_cookies
 
 log = logging.getLogger("yuxiaoer.xianyu.session")

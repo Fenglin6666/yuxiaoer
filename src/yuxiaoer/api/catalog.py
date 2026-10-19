@@ -6,8 +6,9 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ..core.util import dumps, iso, loads, new_id, snippet, yuan
+from ..core.util import dumps, iso, loads, new_id, snippet
 from ..runtime import runtime
+from ._helpers import audit, full_item, item_or_404
 from ._models import (
     CardIn,
     FloorIn,
@@ -17,7 +18,6 @@ from ._models import (
     PriceIn,
     PublishOptionsIn,
 )
-from ._helpers import audit, full_item, item_or_404
 from ._views import _full_item
 
 router = APIRouter()
@@ -71,7 +71,7 @@ async def publish_item(item_id: str, payload: PublishOptionsIn) -> dict[str, Any
     meta = loads(item["meta_json"], {}) or {}
     meta["publish"] = payload.model_dump(exclude_none=True)
     await runtime.db.execute("UPDATE items SET meta_json=?,updated_at=? WHERE id=?", (dumps(meta), iso(), item_id))
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
+    item = await item_or_404(item_id)
     try:
         published = await runtime.queue.run(
             lambda: runtime.channel.publish_item(dict(item)), label=f"publish:{item_id}"
@@ -204,7 +204,7 @@ async def kb_sources(namespace: str | None = None) -> list[dict[str, Any]]:
 
 @router.get("/items/{item_id}/cards")
 async def item_cards(item_id: str) -> dict[str, Any]:
-    item = await item_or_404(item_id, select="id,delivery_mode")
+    await item_or_404(item_id, select="id,delivery_mode")
     cards = await runtime.delivery.list_cards(item_id)
     return {"cards": cards, "counts": await runtime.delivery.card_counts(item_id)}
 
@@ -233,7 +233,7 @@ async def update_item(item_id: str, payload: ItemUpdateIn) -> dict[str, Any]:
 
 @router.post("/items/{item_id}/platform")
 async def item_bind_platform(item_id: str, payload: PlatformItemIn) -> dict[str, Any]:
-    item = await item_or_404(item_id)
+    await item_or_404(item_id)
     platform_id = payload.platform_item_id.strip()
     existing = await runtime.db.fetchone(
         "SELECT id FROM items WHERE platform_item_id=? AND id!=?", (platform_id, item_id)

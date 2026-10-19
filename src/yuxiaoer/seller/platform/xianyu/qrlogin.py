@@ -26,8 +26,7 @@ from typing import Any
 import httpx
 import qrcode
 
-from yuxiaoer.core import config
-from .mtop import merge_set_cookies, parse_cookies
+from .mtop import parse_cookies
 
 log = logging.getLogger("yuxiaoer.xianyu.qr")
 

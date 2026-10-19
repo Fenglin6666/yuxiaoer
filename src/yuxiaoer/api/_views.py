@@ -7,6 +7,7 @@ from typing import Any
 from ..core.util import human_time, loads, yuan
 from ..runtime import runtime
 
+
 async def _message_out(row: Any) -> dict[str, Any]:
     data = dict(row) if not isinstance(row, dict) else dict(row)
     meta = loads(data.get("meta_json"), {}) or {}

@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 from typing import Any
 
 from yuxiaoer.core import config
+from yuxiaoer.core.util import dumps, iso, loads
 from yuxiaoer.seller.platform.channels import BaseChannel, ChannelError
-from yuxiaoer.core.util import dumps, iso, loads, new_id
+
 from .account_sync import AccountSyncService
 from .mtop import MtopClient, new_device_id, parse_cookies
 from .orders import OrderSyncService
-from .publish import PublishError, publish as publish_native
+from .publish import PublishError
+from .publish import publish as publish_native
 from .session import fetch_im_token
 from .ws import XianyuIM
 

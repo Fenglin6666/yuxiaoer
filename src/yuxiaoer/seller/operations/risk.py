@@ -11,15 +11,14 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import timedelta
 from typing import Any
 
 from yuxiaoer.core import config
-from yuxiaoer.seller.notifications.alerts import AlertService
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
 from yuxiaoer.core.util import human_time, iso, now_utc, parse_iso
+from yuxiaoer.seller.notifications.alerts import AlertService
 
 log = logging.getLogger("yuxiaoer.risk")
 

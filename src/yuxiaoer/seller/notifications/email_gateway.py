@@ -16,9 +16,9 @@ from typing import Any
 from uuid import uuid4
 
 from yuxiaoer.core import config
-from yuxiaoer.seller.notifications.email_actions import urls as email_action_urls
 from yuxiaoer.core.util import iso, loads
 from yuxiaoer.seller.notifications.channels import send_email_sync
+from yuxiaoer.seller.notifications.email_actions import urls as email_action_urls
 
 log = logging.getLogger("yuxiaoer.email")
 

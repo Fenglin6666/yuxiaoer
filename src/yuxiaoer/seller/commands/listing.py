@@ -11,6 +11,7 @@ from yuxiaoer.shared.toolbox import ToolBox
 
 from ..constants import VIRTUAL_HINTS
 
+
 class ListingMixin:
     async def _publish_options(self) -> tuple[dict[str, Any] | None, str]:
         """读取店主通过「发布设置」配置的默认发布参数。"""
@@ -187,13 +188,11 @@ class ListingMixin:
             if len(parts) > 1:
                 title, rest = parts[0], parts[1].strip()
         # 标题里去掉明显的发货/类型修饰，保留成色等卖点；被去掉的词仍留在描述里
-        removed = ""
         match = re.search(
             r"\s*(电子资料|虚拟商品|虚拟资料|实物商品|拍下自动发\w*|拍下后自动发\w*|包邮|48小时内发\w*)\s*$",
             title,
         )
         if match:
-            removed = match.group(1)
             title = title[: match.start()]
         title = re.sub(r"\s+", " ", title).strip()
         title = title[:30]

@@ -141,6 +141,7 @@ src/yuxiaoer/
   shared/                    跨域共享（买卖双方都会用）
     knowledge.py             商品/FAQ 检索、同步、墓碑
     toolbox.py               工具调用记录（步数上限/重复检测）
+    ports.py                 买家域依赖的窄接口（告警/消息）
   buyer/                     买家域
     conversation/
       gateway.py             入口分类
@@ -151,6 +152,7 @@ src/yuxiaoer/
     agent.py                 入口路由 + 回复（薄装配）
     constants.py             意图词表/商品类型提示词
     commands/                指令实现（按职责拆成 mixin）
+      _shared.py             查询词清洗 + 确认卡提案
       confirm.py             确认门 + 条件执行
       listing.py             上架参数/预览卡/批量发布
       actions.py             下架/改价/发货/订单/日报/接管
@@ -168,13 +170,14 @@ src/yuxiaoer/
       channels.py            通道抽象
       xianyu/                原生扫码、mtop、WS、订单同步、发布
     notifications/
-      alerts.py  notifications.py
+      alerts.py  notifications.py  channels.py
       email_actions.py  email_gateway.py
     integrations/external_api.py
   api/                       控制台 API（按领域拆分）
     __init__.py              聚合 /api 路由
     system.py  conversations.py  seller_chat.py  catalog.py
     orders.py  accounts.py  notify.py  ops.py  settings.py
+    _helpers.py              实体读取 / 审计 / 视图助手
     _models.py  _views.py    请求模型 / 响应序列化
   runtime.py                 服务装配/生命周期
   main.py                    FastAPI 入口
@@ -235,7 +238,7 @@ $env:PYTHONPATH="D:\yuxiaoer\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-当前保留纯规则/协议/鉴权测试（25 个）；mock/E2E 演示测试已随模拟功能删除。
+当前保留纯规则/协议/鉴权/共享组件测试（33 个）；mock/E2E 演示测试已随模拟功能删除。
 真实 WS/订单需要小号现场联调，不以测试代替。
 
 ## 8. 边界（诚实声明）

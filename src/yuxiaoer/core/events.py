@@ -10,7 +10,7 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from yuxiaoer.core.db import Database
-from yuxiaoer.core.util import dumps, iso, new_id, now_utc
+from yuxiaoer.core.util import dumps, iso, new_id
 
 log = logging.getLogger("yuxiaoer.events")
 

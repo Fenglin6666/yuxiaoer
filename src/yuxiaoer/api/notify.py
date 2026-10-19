@@ -11,7 +11,8 @@ from fastapi.responses import HTMLResponse
 from ..core import config
 from ..core.util import yuan
 from ..runtime import runtime
-from ..seller.notifications.email_actions import token as email_action_token, verify as verify_email_action
+from ..seller.notifications.email_actions import token as email_action_token
+from ..seller.notifications.email_actions import verify as verify_email_action
 from ._models import NotifyChannelIn, TestAlertIn
 
 router = APIRouter()

@@ -22,8 +22,8 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
 from yuxiaoer.core import config
-from yuxiaoer.runtime import runtime
 from yuxiaoer.core.util import dumps, iso, now_utc
+from yuxiaoer.runtime import runtime
 
 router = APIRouter(prefix="/api/v1", tags=["公开接口"], route_class=None)  # 下方替换
 

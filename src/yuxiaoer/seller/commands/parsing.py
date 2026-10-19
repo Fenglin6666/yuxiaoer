@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+
 class ParsingMixin:
     def _parse_price_token(token: str) -> int | None:
         token = (token or "").replace("¥", "").replace("￥", "").replace("元", "").replace("块", "").strip()

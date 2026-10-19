@@ -12,9 +12,17 @@ import hashlib
 import re
 from typing import Any, Iterable
 
-from yuxiaoer.core import config
 from yuxiaoer.core.db import Database
-from yuxiaoer.core.util import dumps, fts_query, fts_text, iso, loads, new_id, snippet, yuan
+from yuxiaoer.core.util import (
+    dumps,
+    fts_query,
+    fts_text,
+    iso,
+    loads,
+    new_id,
+    snippet,
+    yuan,
+)
 
 
 def _hash(text: str) -> str:

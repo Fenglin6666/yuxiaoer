@@ -10,8 +10,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from yuxiaoer.core import config
-from yuxiaoer.core.util import dumps, iso, new_id, now_utc
+from yuxiaoer.core.util import dumps, iso, new_id
+
 from .mtop import MtopClient
 
 log = logging.getLogger("yuxiaoer.xianyu.orders")

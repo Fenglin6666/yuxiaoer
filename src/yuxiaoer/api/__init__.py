@@ -2,7 +2,17 @@
 
 from fastapi import APIRouter
 
-from . import accounts, catalog, conversations, notify, ops, orders, seller_chat, settings, system
+from . import (
+    accounts,
+    catalog,
+    conversations,
+    notify,
+    ops,
+    orders,
+    seller_chat,
+    settings,
+    system,
+)
 
 router = APIRouter(prefix="/api")
 

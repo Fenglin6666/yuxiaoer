@@ -13,8 +13,9 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from yuxiaoer.core import config
-from .api import router
 from yuxiaoer.seller.integrations.external_api import router as external_router
+
+from .api import router
 from .runtime import runtime
 
 logging.basicConfig(

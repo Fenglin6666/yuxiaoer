@@ -2,7 +2,7 @@
 
 > 梳理日期：2026-10-18 ｜ 结构重整：2026-10-19（api 包 / seller mixin / shared 层）｜ 版本 v0.3.1
 >
-> 规模：Python 12,498 行 / 前端约 2,826 行 / 74 个模块 / 82 个 HTTP 操作 / 25 个单测（全绿）
+> 规模：Python 12,651 行 / 前端约 2,826 行 / 78 个模块 / 82 个 HTTP 操作 / 33 个单测（全绿）
 
 ---
 
@@ -219,4 +219,16 @@ risk 未熔断 · queue 正常 · outbox 无积压 · LLM 规则模式
 2. **鉴权**：已提供可选 Basic Auth；若监听 0.0.0.0 或走反代，建议强制开启（或再加一层反代鉴权）
 3. **事件处理器加重试**：`events.attempts` 已有字段，补 3 次退避即可
 4. **补评测用例**（议价守住底价 / 站外引流静默 / 售后转人工），把 `eval_cases` 从空表填起来
-5. **补测试**：当前 25 个单测覆盖 12.5k 行；优先给 `api/` 路由加 ASGI 冒烟、给 `commands/` 加参数补全测试
+5. **补测试**：当前 33 个单测覆盖 12.6k 行；优先给 `api/` 路由加 ASGI 冒烟、给 `commands/` 加参数补全测试
+
+---
+
+## 12. 可复用组件（2026-10-19 抽取）
+
+| 组件 | 位置 | 解决什么 | 怎么扩 |
+|---|---|---|---|
+| 渠道发送器注册表 | `seller/notifications/channels.py` | 10 类通知渠道的重复 HTTP/重试样板 | 写一个 `send_xxx(cfg, msg)` 并注册到 `SENDERS` |
+| API 实体/审计助手 | `api/_helpers.py` | 取实体 + 404 + 审计 SQL 的复制 | 新路由直接用 `item_or_404` / `order_or_404` / `audit` |
+| 指令共享助手 | `seller/commands/_shared.py` | 下架/重上/改价复制三遍的流程 | 新写操作只准备 `preview` 与文案，调用 `propose()` |
+| 跨域窄接口 | `shared/ports.py` | 买家域 import 卖家实现 | 新依赖先加 Protocol，再由 runtime 注入 |
+| 工具调用记录 | `shared/toolbox.py` | 买卖两侧各写一份工具落库 | 共用 `ToolBox.call`，步数/重复检测一处维护 |

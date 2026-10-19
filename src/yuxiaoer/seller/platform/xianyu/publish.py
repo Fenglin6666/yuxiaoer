@@ -15,6 +15,7 @@ import httpx
 from PIL import Image
 
 from yuxiaoer.core import config
+
 from .mtop import MtopClient
 
 UPLOAD_URL = (

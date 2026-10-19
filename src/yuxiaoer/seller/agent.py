@@ -9,8 +9,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from yuxiaoer.shared.toolbox import ToolBox
-from yuxiaoer.shared.knowledge import KnowledgeService
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
 from yuxiaoer.core.llm import LLMClient
@@ -22,6 +20,8 @@ from yuxiaoer.seller.conversation.messaging import MessagingService
 from yuxiaoer.seller.notifications.alerts import AlertService
 from yuxiaoer.seller.platform.channels import BaseChannel
 from yuxiaoer.seller.write_queue import WriteQueue
+from yuxiaoer.shared.knowledge import KnowledgeService
+from yuxiaoer.shared.toolbox import ToolBox
 
 from .commands.actions import CommandActionsMixin
 from .commands.confirm import ConfirmMixin

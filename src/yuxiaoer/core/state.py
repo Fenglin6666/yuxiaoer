@@ -11,7 +11,7 @@ from typing import Any, Iterable
 
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
-from yuxiaoer.core.util import dumps, iso, now_utc
+from yuxiaoer.core.util import dumps, iso
 
 ITEM_STATUSES = {
     "draft", "pending_confirm", "live", "sold_out", "offline",

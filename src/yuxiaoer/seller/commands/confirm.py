@@ -8,6 +8,7 @@ from yuxiaoer.core.state import transition_item
 from yuxiaoer.core.util import dumps, iso, new_id, yuan
 from yuxiaoer.shared.toolbox import ToolBox
 
+
 class ConfirmMixin:
     async def resolve(self, confirmation_id: str, approve: bool) -> bool:
         cfm = await self.confirmations.get(confirmation_id)

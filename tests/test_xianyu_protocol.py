@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 import unittest
 
-from yuxiaoer.seller.platform.xianyu.mtop import generate_mid, generate_sign, merge_set_cookies
+from yuxiaoer.seller.platform.xianyu.mtop import (
+    generate_mid,
+    generate_sign,
+    merge_set_cookies,
+)
 from yuxiaoer.seller.platform.xianyu.orders import OrderSyncService
 from yuxiaoer.seller.platform.xianyu.ws import XianyuIM, normalize_message
 

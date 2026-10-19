@@ -5,11 +5,20 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from yuxiaoer.core.util import dumps, human_time, iso, loads, local_now, start_of_local_day, yuan
+from yuxiaoer.core.util import (
+    dumps,
+    human_time,
+    iso,
+    loads,
+    local_now,
+    start_of_local_day,
+    yuan,
+)
 from yuxiaoer.shared.toolbox import ToolBox
 
 from ..constants import TRACKING_COMPANIES
 from ._shared import clean_query, propose
+
 
 class CommandActionsMixin:
     async def _takeover_command(self, text: str) -> dict[str, Any]:
