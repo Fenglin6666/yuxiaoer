@@ -6,8 +6,8 @@ import json
 import re
 from typing import Any
 
-from yuxiaoer.buyer.conversation.agent import ToolBox
-from yuxiaoer.buyer.knowledge.service import KnowledgeService
+from yuxiaoer.shared.toolbox import ToolBox
+from yuxiaoer.shared.knowledge import KnowledgeService
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
 from yuxiaoer.core.llm import LLMClient

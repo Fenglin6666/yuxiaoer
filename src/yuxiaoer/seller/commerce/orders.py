@@ -17,7 +17,7 @@ from yuxiaoer.seller.platform.channels import BaseChannel
 from yuxiaoer.core.db import Database
 from yuxiaoer.seller.commerce.delivery import DeliveryService
 from yuxiaoer.core.events import EventBus
-from yuxiaoer.buyer.knowledge.service import KnowledgeService
+from yuxiaoer.shared.knowledge import KnowledgeService
 from yuxiaoer.seller.conversation.messaging import MessagingService
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.state import transition_item, transition_order

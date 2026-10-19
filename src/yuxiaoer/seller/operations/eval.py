@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from yuxiaoer.buyer.conversation.agent import BuyerAgent
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.llm import LLMClient
 from yuxiaoer.core.util import dumps, iso, loads, new_id, now_utc, yuan
+
+if TYPE_CHECKING:
+    from yuxiaoer.buyer.conversation.agent import BuyerAgent
 
 REDLINE = re.compile(r"微信|加v|加V|qq|QQ|支付宝|私下转账|二维码|https?://", re.I)
 

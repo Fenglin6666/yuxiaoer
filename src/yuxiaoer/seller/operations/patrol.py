@@ -16,7 +16,7 @@ from yuxiaoer.seller.notifications.alerts import AlertService
 from yuxiaoer.seller.platform.channels import BaseChannel
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
-from yuxiaoer.buyer.knowledge.service import KnowledgeService
+from yuxiaoer.shared.knowledge import KnowledgeService
 from yuxiaoer.seller.conversation.messaging import MessagingService
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.util import (

@@ -20,7 +20,7 @@ from yuxiaoer.seller.notifications.email_gateway import EmailGateway
 from yuxiaoer.seller.operations.eval import EvalService
 from yuxiaoer.core.events import EventBus
 from yuxiaoer.buyer.conversation.ingest import IngestService
-from yuxiaoer.buyer.knowledge.service import KnowledgeService
+from yuxiaoer.shared.knowledge import KnowledgeService
 from yuxiaoer.core.llm import LLMClient
 from yuxiaoer.seller.conversation.messaging import MessagingService
 from yuxiaoer.seller.operations.metrics import MetricsService
