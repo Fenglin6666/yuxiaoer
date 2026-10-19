@@ -8,8 +8,9 @@ from fastapi import APIRouter, HTTPException
 
 from ..core.util import dumps, iso, loads, yuan
 from ..runtime import runtime
+from ._helpers import full_item, item_or_404
 from ._models import PublishConfirmEditIn, SellerMessageIn
-from ._views import _conv_out, _full_item, _message_out
+from ._views import _conv_out, _message_out
 
 router = APIRouter()
 
@@ -49,9 +50,7 @@ async def edit_confirmation(confirmation_id: str, payload: PublishConfirmEditIn)
     if cfm["status"] != "pending":
         raise HTTPException(409, "确认项已处理")
     item_id = (cfm.get("payload") or {}).get("item_id")
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品草稿不存在")
+    item = await item_or_404(item_id, detail="商品草稿不存在")
     data = payload.model_dump(exclude_unset=True)
     title = (data.get("title") or item["title"]).strip()
     description = data.get("description", item["description"])
@@ -113,4 +112,4 @@ async def edit_confirmation(confirmation_id: str, payload: PublishConfirmEditIn)
     )
     if not updated:
         raise HTTPException(409, "确认项已处理")
-    return {"ok": True, "confirmation": updated, "item": _full_item(await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,)))}
+    return {"ok": True, "confirmation": updated, "item": await full_item(item_id)}

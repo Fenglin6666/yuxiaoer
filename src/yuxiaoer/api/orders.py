@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..core.util import yuan
 from ..runtime import runtime
+from ._helpers import order_or_404
 from ._models import OrderReviewIn, RefundResolveIn, ShipIn
 
 router = APIRouter()
@@ -54,10 +55,7 @@ async def complete_order(order_id: str) -> dict[str, Any]:
 
 @router.get("/orders/{order_id}")
 async def order_detail(order_id: str) -> dict[str, Any]:
-    order = await runtime.db.fetchone("SELECT * FROM orders WHERE id=?", (order_id,))
-    if not order:
-        raise HTTPException(404, "订单不存在")
-    order = dict(order)
+    order = await order_or_404(order_id)
     item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (order["item_id"],))
     buyer = await runtime.db.fetchone("SELECT * FROM buyers WHERE id=?", (order["buyer_id"],))
     conv = await runtime.db.fetchone(

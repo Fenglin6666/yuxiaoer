@@ -10,15 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import smtplib
-from email.message import EmailMessage
-from email.utils import formataddr
 from typing import Any
-
-import httpx
 
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.util import dumps, human_time, iso, loads, new_id, now_utc
+
+from .channels import SENDERS, Message
 
 log = logging.getLogger("yuxiaoer.notify")
 
@@ -132,99 +129,17 @@ class NotificationService:
 
     async def _send(self, channel: dict[str, Any], alert: dict[str, Any]) -> str:
         kind = channel["kind"]
-        cfg = channel.get("config") or {}
+        sender = SENDERS.get(kind)
+        if sender is None:
+            raise ValueError(f"未知渠道 {kind}")
         level = alert.get("level", "P1")
-        title = f"【鱼小二 · {level}】{alert.get('title', '')}"
-        body = alert.get("body") or ""
-        text = f"{title}\n{body}"
-        if kind == "log":
-            return "recorded"
-        if kind == "wecom":
-            url = cfg.get("url", "")
-            if not url:
-                raise ValueError("缺少企业微信 webhook url")
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.post(url, json={"msgtype": "text", "text": {"content": text[:1800]}})
-            r.raise_for_status()
-            return r.text[:200]
-        if kind == "bark":
-            url = cfg.get("url", "").rstrip("/")
-            if not url:
-                raise ValueError("缺少 Bark server url")
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.post(url, json={"title": title, "body": body[:1800], "group": "yuxiaoer"})
-            r.raise_for_status()
-            return r.text[:200]
-        if kind == "serverchan":
-            token = cfg.get("token", "")
-            if not token:
-                raise ValueError("缺少 Server酱 token")
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.post(
-                    f"https://sctapi.ftqq.com/{token}.send",
-                    data={"title": title[:100], "desp": body[:1800]},
-                )
-            r.raise_for_status()
-            return r.text[:200]
-        if kind == "ntfy":
-            url = cfg.get("url", "").rstrip("/")
-            topic = cfg.get("topic", "yuxiaoer")
-            if not url:
-                raise ValueError("缺少 ntfy url")
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.post(
-                    f"{url}/{topic}", content=text[:1800],
-                    headers={"Title": title[:100], "Priority": "high" if level == "P0" else "default"},
-                )
-            r.raise_for_status()
-            return r.text[:200]
-        if kind == "telegram":
-            token = cfg.get("token", "")
-            chat_id = cfg.get("chat_id", "")
-            if not token or not chat_id:
-                raise ValueError("缺少 Telegram token/chat_id")
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.post(
-                    f"https://api.telegram.org/bot{token}/sendMessage",
-                    json={"chat_id": chat_id, "text": text[:4000], "disable_web_page_preview": True},
-                )
-            r.raise_for_status()
-            return r.text[:200]
-        if kind == "pushplus":
-            token = cfg.get("token", "")
-            if not token:
-                raise ValueError("缺少 PushPlus token")
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.post(
-                    "http://www.pushplus.plus/send",
-                    json={"token": token, "title": title[:100], "content": body[:1800], "template": "txt"},
-                )
-            r.raise_for_status()
-            return r.text[:200]
-        if kind == "gotify":
-            url = cfg.get("url", "").rstrip("/")
-            token = cfg.get("token", "")
-            if not url:
-                raise ValueError("缺少 Gotify url")
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.post(
-                    f"{url}/message",
-                    params={"token": token},
-                    json={"title": title[:100], "message": body[:1800], "priority": 8 if level == "P0" else 5},
-                )
-            r.raise_for_status()
-            return r.text[:200]
-        if kind == "generic":
-            url = cfg.get("url", "")
-            if not url:
-                raise ValueError("缺少 webhook url")
-            async with httpx.AsyncClient(timeout=8) as client:
-                r = await client.post(url, json={"title": title, "body": body, "level": level, "alert": alert})
-            r.raise_for_status()
-            return r.text[:200]
-        if kind == "email":
-            return await asyncio.to_thread(_send_email, cfg, title, body)
-        raise ValueError(f"未知渠道 {kind}")
+        message = Message(
+            title=f"【鱼小二 · {level}】{alert.get('title', '')}",
+            body=alert.get("body") or "",
+            level=level,
+            alert=alert,
+        )
+        return await sender(channel.get("config") or {}, message)
 
     async def send_test(self, channel_id: str) -> dict[str, Any]:
         channel = await self.get(channel_id)
@@ -277,37 +192,3 @@ def _config_summary(config: dict[str, Any]) -> str:
     if config.get("smtp_password") or config.get("imap_password"):
         parts.append("password=****")
     return " · ".join(parts) or "已配置"
-
-
-def _send_email(cfg: dict[str, Any], title: str, body: str, to_addr: str | None = None) -> str:
-    host = str(cfg.get("smtp_host") or "").strip()
-    if not host:
-        raise ValueError("缺少 SMTP host")
-    ssl_on = bool(cfg.get("smtp_ssl", True))
-    port = int(cfg.get("smtp_port") or (465 if ssl_on else 587))
-    user = str(cfg.get("smtp_user") or "").strip()
-    password = str(cfg.get("smtp_password") or "")
-    from_addr = str(cfg.get("from_addr") or user).strip()
-    to_addr = str(to_addr or cfg.get("to_addr") or "").strip()
-    if not from_addr or not to_addr:
-        raise ValueError("缺少发件人/收件人邮箱")
-    msg = EmailMessage()
-    msg["Subject"] = title[:180]
-    msg["From"] = formataddr(("鱼小二", from_addr))
-    msg["To"] = to_addr
-    msg["X-Yuxiaoer-Agent"] = "1"
-    msg["Auto-Submitted"] = "auto-generated"
-    msg.set_content(body or title)
-    smtp = smtplib.SMTP_SSL(host, port, timeout=25) if ssl_on else smtplib.SMTP(host, port, timeout=25)
-    try:
-        if not ssl_on and cfg.get("smtp_starttls", True):
-            smtp.starttls()
-        if user and password:
-            smtp.login(user, password)
-        smtp.send_message(msg)
-    finally:
-        try:
-            smtp.quit()
-        except Exception:
-            pass
-    return "sent"

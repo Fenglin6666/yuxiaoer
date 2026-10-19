@@ -17,6 +17,7 @@ from ._models import (
     PriceIn,
     PublishOptionsIn,
 )
+from ._helpers import audit, full_item, item_or_404
 from ._views import _full_item
 
 router = APIRouter()
@@ -57,14 +58,12 @@ async def create_item(payload: ItemCreateIn) -> dict[str, Any]:
         ),
     )
     await runtime.knowledge.sync_item(item_id)
-    return {"ok": True, "item": _full_item(await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,)))}
+    return {"ok": True, "item": await full_item(item_id)}
 
 
 @router.post("/items/{item_id}/publish")
 async def publish_item(item_id: str, payload: PublishOptionsIn) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id)
     if item["status"] == "live" and item["platform_item_id"]:
         raise HTTPException(400, "商品已经是上架状态")
     if item["platform_item_id"]:
@@ -85,18 +84,13 @@ async def publish_item(item_id: str, payload: PublishOptionsIn) -> dict[str, Any
     )
     await runtime.knowledge.sync_item(item_id)
     await runtime.delivery.ensure_item_cards(item_id)
-    await runtime.db.execute(
-        "INSERT INTO audit_logs(ts,actor,action,target,detail_json,result) VALUES(?,?,?,?,?,?)",
-        (iso(), "owner", "item.publish", item_id, dumps(published), "success"),
-    )
-    return {"ok": True, "item": _full_item(await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,)))}
+    await audit("item.publish", item_id, published)
+    return {"ok": True, "item": await full_item(item_id)}
 
 
 @router.post("/items/{item_id}/offline")
 async def offline_item(item_id: str) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id)
     if not item["platform_item_id"]:
         raise HTTPException(400, "商品还没有平台商品 ID")
     try:
@@ -109,18 +103,13 @@ async def offline_item(item_id: str) -> dict[str, Any]:
         "UPDATE items SET status='offline',updated_at=? WHERE id=?", (iso(), item_id)
     )
     await runtime.knowledge.tombstone(f"item:{item_id}")
-    await runtime.db.execute(
-        "INSERT INTO audit_logs(ts,actor,action,target,detail_json,result) VALUES(?,?,?,?,?,?)",
-        (iso(), "owner", "item.offline", item_id, "{}", "success"),
-    )
+    await audit("item.offline", item_id)
     return {"ok": True}
 
 
 @router.post("/items/{item_id}/relist")
 async def relist_item(item_id: str) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id)
     if item["status"] not in ("offline", "sold_out"):
         raise HTTPException(400, f"当前状态 {item['status']} 不能重新上架")
     meta = loads(item["meta_json"], {}) or {}
@@ -139,18 +128,13 @@ async def relist_item(item_id: str) -> dict[str, Any]:
     )
     await runtime.knowledge.sync_item(item_id)
     await runtime.delivery.ensure_item_cards(item_id)
-    await runtime.db.execute(
-        "INSERT INTO audit_logs(ts,actor,action,target,detail_json,result) VALUES(?,?,?,?,?,?)",
-        (iso(), "owner", "item.relist", item_id, dumps(published), "success"),
-    )
-    return {"ok": True, "item": _full_item(await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,)))}
+    await audit("item.relist", item_id, published)
+    return {"ok": True, "item": await full_item(item_id)}
 
 
 @router.patch("/items/{item_id}/price")
 async def change_item_price(item_id: str, payload: PriceIn) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id)
     if not item["platform_item_id"]:
         raise HTTPException(400, "商品还没有平台商品 ID")
     try:
@@ -165,18 +149,13 @@ async def change_item_price(item_id: str, payload: PriceIn) -> dict[str, Any]:
         (payload.price_cents, payload.price_cents, payload.stock, iso(), item_id),
     )
     await runtime.knowledge.sync_item(item_id)
-    await runtime.db.execute(
-        "INSERT INTO audit_logs(ts,actor,action,target,detail_json,result) VALUES(?,?,?,?,?,?)",
-        (iso(), "owner", "item.price", item_id, dumps({"price_cents": payload.price_cents}), "success"),
-    )
+    await audit("item.price", item_id, {"price_cents": payload.price_cents})
     return {"ok": True}
 
 
 @router.get("/items/{item_id}")
 async def item_detail(item_id: str) -> dict[str, Any]:
-    row = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not row:
-        raise HTTPException(404, "商品不存在")
+    row = await item_or_404(item_id)
     item = _full_item(row)
     item["knowledge"] = await runtime.knowledge.item_knowledge(item_id)
     item["orders"] = [dict(o) for o in await runtime.db.fetchall(
@@ -190,9 +169,7 @@ async def item_detail(item_id: str) -> dict[str, Any]:
 
 @router.post("/items/{item_id}/floor")
 async def update_floor(item_id: str, payload: FloorIn) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id)
     if payload.floor_price_cents > item["price_cents"]:
         raise HTTPException(400, "底价不能高于售价")
     await runtime.db.execute(
@@ -227,18 +204,14 @@ async def kb_sources(namespace: str | None = None) -> list[dict[str, Any]]:
 
 @router.get("/items/{item_id}/cards")
 async def item_cards(item_id: str) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT id,delivery_mode FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id, select="id,delivery_mode")
     cards = await runtime.delivery.list_cards(item_id)
     return {"cards": cards, "counts": await runtime.delivery.card_counts(item_id)}
 
 
 @router.patch("/items/{item_id}")
 async def update_item(item_id: str, payload: ItemUpdateIn) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id)
     values = payload.model_dump(exclude_unset=True)
     if not values:
         return {"ok": True}
@@ -260,9 +233,7 @@ async def update_item(item_id: str, payload: ItemUpdateIn) -> dict[str, Any]:
 
 @router.post("/items/{item_id}/platform")
 async def item_bind_platform(item_id: str, payload: PlatformItemIn) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id)
     platform_id = payload.platform_item_id.strip()
     existing = await runtime.db.fetchone(
         "SELECT id FROM items WHERE platform_item_id=? AND id!=?", (platform_id, item_id)
@@ -284,9 +255,7 @@ async def item_bind_platform(item_id: str, payload: PlatformItemIn) -> dict[str,
 
 @router.post("/items/{item_id}/cards")
 async def item_card_add(item_id: str, payload: CardIn) -> dict[str, Any]:
-    item = await runtime.db.fetchone("SELECT id,delivery_mode FROM items WHERE id=?", (item_id,))
-    if not item:
-        raise HTTPException(404, "商品不存在")
+    item = await item_or_404(item_id, select="id,delivery_mode")
     if item["delivery_mode"] != "virtual":
         raise HTTPException(400, "只有虚拟商品可以添加卡券")
     try:

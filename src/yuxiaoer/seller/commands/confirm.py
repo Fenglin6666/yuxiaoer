@@ -2,31 +2,11 @@
 
 from __future__ import annotations
 
-import json
-import re
 from typing import Any
 
-from yuxiaoer.shared.toolbox import ToolBox
-from yuxiaoer.shared.knowledge import KnowledgeService
-from yuxiaoer.core.db import Database
-from yuxiaoer.core.events import EventBus
-from yuxiaoer.core.llm import LLMClient
-from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.state import transition_item
-from yuxiaoer.core.util import (
-    dumps, human_time, iso, loads, local_now, new_id, now_utc, parse_iso,
-    percentile, snippet, start_of_local_day, yuan,
-)
-from yuxiaoer.seller.commerce.orders import OrderService
-from yuxiaoer.seller.confirmations import ConfirmationService
-from yuxiaoer.seller.conversation.messaging import MessagingService
-from yuxiaoer.seller.notifications.alerts import AlertService
-from yuxiaoer.seller.platform.channels import BaseChannel
-from yuxiaoer.seller.write_queue import WriteQueue
-
-from ..constants import (
-    CANCEL_WORDS, PHYSICAL_HINTS, TRACKING_COMPANIES, VIRTUAL_HINTS, YES_WORDS,
-)
+from yuxiaoer.core.util import dumps, iso, new_id, yuan
+from yuxiaoer.shared.toolbox import ToolBox
 
 class ConfirmMixin:
     async def resolve(self, confirmation_id: str, approve: bool) -> bool:

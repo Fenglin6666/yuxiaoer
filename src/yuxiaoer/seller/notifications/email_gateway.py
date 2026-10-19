@@ -18,7 +18,7 @@ from uuid import uuid4
 from yuxiaoer.core import config
 from yuxiaoer.seller.notifications.email_actions import urls as email_action_urls
 from yuxiaoer.core.util import iso, loads
-from yuxiaoer.seller.notifications.notifications import _send_email
+from yuxiaoer.seller.notifications.channels import send_email_sync
 
 log = logging.getLogger("yuxiaoer.email")
 
@@ -150,7 +150,7 @@ class EmailGateway:
                         reply = "已处理。" if result.get("ok") else f"处理失败：{result.get('error') or '未知错误'}"
                     text_body, html_body = self._render_reply(reply, card)
                     await asyncio.to_thread(
-                        _send_email, cfg,
+                        send_email_sync, cfg,
                         f"Re: {_decode(item['message'].get('Subject')) or '鱼小二指令'}",
                         text_body,
                         to_addr=sender,

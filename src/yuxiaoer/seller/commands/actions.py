@@ -2,31 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
+from yuxiaoer.core.util import dumps, human_time, iso, loads, local_now, start_of_local_day, yuan
 from yuxiaoer.shared.toolbox import ToolBox
-from yuxiaoer.shared.knowledge import KnowledgeService
-from yuxiaoer.core.db import Database
-from yuxiaoer.core.events import EventBus
-from yuxiaoer.core.llm import LLMClient
-from yuxiaoer.core.settings_service import SettingsService
-from yuxiaoer.core.state import transition_item
-from yuxiaoer.core.util import (
-    dumps, human_time, iso, loads, local_now, new_id, now_utc, parse_iso,
-    percentile, snippet, start_of_local_day, yuan,
-)
-from yuxiaoer.seller.commerce.orders import OrderService
-from yuxiaoer.seller.confirmations import ConfirmationService
-from yuxiaoer.seller.conversation.messaging import MessagingService
-from yuxiaoer.seller.notifications.alerts import AlertService
-from yuxiaoer.seller.platform.channels import BaseChannel
-from yuxiaoer.seller.write_queue import WriteQueue
 
-from ..constants import (
-    CANCEL_WORDS, PHYSICAL_HINTS, TRACKING_COMPANIES, VIRTUAL_HINTS, YES_WORDS,
-)
+from ..constants import TRACKING_COMPANIES
+from ._shared import clean_query, propose
 
 class CommandActionsMixin:
     async def _takeover_command(self, text: str) -> dict[str, Any]:
@@ -64,9 +47,7 @@ class CommandActionsMixin:
         return dict(row) if row else None
 
     async def _offline(self, text: str, toolbox: ToolBox) -> dict[str, Any]:
-        query = re.sub(r"(下架|撤下|删除)", " ", text)
-        query = re.sub(r"^(把|请|帮我|麻烦|给|将)\s*", "", query.strip())
-        query = re.sub(r"(那个|这件|商品|一下|的)", " ", query).strip(" ，,。")
+        query = clean_query(text, r"(下架|撤下|删除)")
         matches = await self._find_items(query)
         if not matches:
             return {"ok": False, "text": f"没找到「{query}」对应的在售商品，可以说得更具体一点，或先发「订单？」看看。"}
@@ -82,22 +63,18 @@ class CommandActionsMixin:
             "kind": "offline_item", "item_id": item["id"], "title": item["title"],
             "price_cents": item["price_cents"], "status": item["status"],
         }
-        cfm = await self.confirmations.create(
-            "offline_item", f"下架商品：{item['title']}", preview, {"item_id": item["id"]},
-            source="seller_agent",
+        return await propose(
+            self.confirmations,
+            toolbox,
+            kind="offline_item",
+            title=f"下架商品：{item['title']}",
+            preview=preview,
+            payload={"item_id": item["id"]},
+            text=f"要下架「{item['title']}」（¥{yuan(item['price_cents'])}）吗？确认后我会下架并同步知识库墓碑。",
         )
-        await toolbox.call("offline_item", {"item_id": item["id"]}, lambda: {"preview": True})
-        card = {"type": "confirmation", "confirmation_id": cfm["id"], "preview": preview}
-        return {
-            "ok": True,
-            "text": f"要下架「{item['title']}」（¥{yuan(item['price_cents'])}）吗？确认后我会下架并同步知识库墓碑。",
-            "card": card,
-        }
 
     async def _relist(self, text: str, toolbox: ToolBox) -> dict[str, Any]:
-        query = re.sub(r"(重新上架|重新发布|再上架|续售|恢复上架|重新挂)", " ", text)
-        query = re.sub(r"^(把|请|帮我|麻烦|给|将)\s*", "", query.strip())
-        query = re.sub(r"(那个|这件|商品|一下|的)", " ", query).strip(" ，,。")
+        query = clean_query(text, r"(重新上架|重新发布|再上架|续售|恢复上架|重新挂)")
         matches = [m for m in await self._find_items(query) if m["status"] in ("offline", "sold_out")]
         if not matches:
             return {"ok": False, "text": f"没找到「{query}」对应的已下架/已售出商品。"}
@@ -126,30 +103,31 @@ class CommandActionsMixin:
             "publish_category": (options.get("category") or {}).get("cat_name"),
             "publish_address": options.get("address"),
         }
-        cfm = await self.confirmations.create(
-            "relist_item", f"重新上架：{item['title']}", preview, {"item_id": item["id"]},
-            source="seller_agent",
-        )
-        await toolbox.call("relist_item", {"item_id": item["id"]}, lambda: {"preview": True})
-        card = {"type": "confirmation", "confirmation_id": cfm["id"], "preview": preview}
-        return {
-            "ok": True,
-            "text": (
+        return await propose(
+            self.confirmations,
+            toolbox,
+            kind="relist_item",
+            title=f"重新上架：{item['title']}",
+            preview=preview,
+            payload={"item_id": item["id"]},
+            text=(
                 f"要重新上架「{item['title']}」（¥{yuan(item['price_cents'])}）吗？\n"
                 "确认后会按保存的发布参数重新发布一条新商品；旧的已下架商品仍保留在闲鱼后台。"
             ),
-            "card": card,
-        }
+        )
 
     async def _change_price(self, text: str, toolbox: ToolBox) -> dict[str, Any]:
         price, _ = self._extract_price(text)
         if not price:
             return {"ok": False, "text": "改价要带新价格，例如：改价 Kindle 到 199 元。"}
-        query = re.sub(r"(改价|改价格|调价|价格改)", " ", text)
-        query = re.sub(r"(到|改成|改为|至)\s*\d+(?:\.\d{1,2})?\s*(?:元|块)?", " ", query)
-        query = re.sub(r"\d+(?:\.\d{1,2})?\s*(?:元|块)?", " ", query)
-        query = re.sub(r"^(把|请|帮我|麻烦|给|将)\s*", "", query.strip())
-        query = re.sub(r"(那个|这件|商品|一下|的|到|改成|改为)", " ", query).strip(" ，,。")
+        query = clean_query(
+            text,
+            r"(改价|改价格|调价|价格改)",
+            extra=(
+                r"(到|改成|改为|至)\s*\d+(?:\.\d{1,2})?\s*(?:元|块)?"
+                r"|\d+(?:\.\d{1,2})?\s*(?:元|块)?|(到|改成|改为)"
+            ),
+        )
         matches = await self._find_items(query)
         if not matches:
             return {"ok": False, "text": f"没找到「{query}」对应的商品，请把商品名说具体一点。"}
@@ -164,17 +142,16 @@ class CommandActionsMixin:
             "old_price_cents": item["price_cents"], "new_price_cents": price,
             "old_price_text": f"¥{yuan(item['price_cents'])}", "new_price_text": f"¥{yuan(price)}",
         }
-        cfm = await self.confirmations.create(
-            "change_price", f"改价：{item['title']}", preview,
-            {"item_id": item["id"], "price_cents": price}, source="seller_agent",
+        return await propose(
+            self.confirmations,
+            toolbox,
+            kind="change_price",
+            title=f"改价：{item['title']}",
+            preview=preview,
+            payload={"item_id": item["id"], "price_cents": price},
+            tool_args={"item_id": item["id"], "price": price},
+            text=f"把「{item['title']}」从 ¥{yuan(item['price_cents'])} 改到 ¥{yuan(price)}？确认后执行。",
         )
-        await toolbox.call("change_price", {"item_id": item["id"], "price": price}, lambda: {"preview": True})
-        card = {"type": "confirmation", "confirmation_id": cfm["id"], "preview": preview}
-        return {
-            "ok": True,
-            "text": f"把「{item['title']}」从 ¥{yuan(item['price_cents'])} 改到 ¥{yuan(price)}？确认后执行。",
-            "card": card,
-        }
 
     async def _ship(self, text: str, toolbox: ToolBox) -> dict[str, Any]:
         order_id_match = re.search(r"(ord_[a-z0-9]+)", text)
