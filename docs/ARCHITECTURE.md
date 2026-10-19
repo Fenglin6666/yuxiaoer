@@ -22,7 +22,7 @@
 | 并发模型 | 纯 asyncio；无 Celery / Redis / MQ |
 | 存储 | 单文件 SQLite（WAL），一条 aiosqlite 连接，写操作走 `asyncio.Lock` |
 | 调度 | 6 组 `asyncio.create_task` 常驻循环（见 §7），无独立调度器 |
-| 前端 | 无构建单页：`index.html` + `app.js`（1,897 行）+ `styles.css`（860 行），hash 路由 9 个页面 |
+| 前端 | 无构建 ESM 单页：`index.html` + `js/app.js`（入口）+ `js/core.js` + `js/pages/`（9 个页面）+ `styles.css`，hash 路由 9 个页面 |
 | 外部依赖 | 闲鱼 passport / mtop / IM WS；可选 LLM（OpenAI 兼容）；可选高德；9 类通知渠道 |
 
 启动顺序（`runtime.py`）：`DB 连接 → 迁移 → 事件总线 → 设置/队列/通道 → 风险/告警/通知 → LLM → 各业务服务 → 订阅 order.paid → 引导数据 → 后台循环`。所有服务是 `Runtime` 上的公开属性，彼此**靠构造函数手工注入**，没有 DI 容器。
@@ -189,7 +189,7 @@ order: new → paid → shipped → delivered → done
 | 2 | ~~两个巨型 Agent 文件~~ **已处理** | 2026-10-19：`seller/agent.py` 1,191 → 181 行，拆成 `commands/` 4 个 mixin；`api.py` 1,241 行 → `api/` 9 个领域路由 | 剩余热点：`buyer/conversation/agent.py` 637 行 |
 | 3 | ~~域边界是目录级的~~ **已部分处理** | `ToolBox`/`KnowledgeService` 迁到 `shared/`；`seller → buyer` 运行时依赖归零；`buyer → seller` 仍有 4 处（告警/确认/消息） | 剩余 4 条是买家回复链路的必要依赖，下一步可用协议接口反转 |
 | 4 | **事件处理器无重试** | `events._dispatch` 失败仅标 failed + 告警 | `order.paid` 处理器异常 → 自动发货静默丢失，只能人工补发 |
-| 5 | **前端单文件 1,897 行** | `static/app.js` 无模块化、无构建 | 9 个页面共享一个全局 `S` 状态；后续加页面成本递增 |
+| 5 | ~~前端单文件 1,897 行~~ **已处理** | 2026-10-19：拆成 `js/core.js`（265 行）+ `js/pages/*.js`（9 个页面）+ `js/app.js`（入口 51 行），原生 ESM、无构建 | 全局 `S` 仍是单例状态，但每个页面只依赖 core；仍需浏览器逐页回归 |
 | 6 | **依赖声明不全** | `websockets` 未在 `pyproject.toml` / `requirements.txt` 中直接声明，靠 `uvicorn[standard]` 间接带入 | 换部署方式（如 `uvicorn` 非 standard）会运行时报错 |
 | 7 | ~~示例配置含真实密钥~~ **已处理** | 2026-10-19：`.env.example` 的 `AMAP_KEY` 已清空 | 仓库已初始化 git 并推到私有远端 |
 | 8 | **关键参数硬编码** | 频控 2/min、步数 6/8、合并窗口默认值在 `config.py`，不在 `EDITABLE_SETTINGS` | 调参要改代码重启 |
@@ -215,7 +215,7 @@ risk 未熔断 · queue 正常 · outbox 无积压 · LLM 规则模式
 
 ## 11. 如果要继续演进，优先级建议
 
-1. **拆前端 `static/app.js`**（1,898 行、90 个函数、全局 `S`）：按 `js/core.js` + `js/pages/*.js` 走原生 ESM，无构建；拆完需要浏览器逐页回归
+1. **前端 ESM 拆分已完成**：`js/app.js`（入口/路由）+ `js/core.js` + `js/pages/*.js`；下一步是浏览器逐页回归与状态按页收窄
 2. **鉴权**：已提供可选 Basic Auth；若监听 0.0.0.0 或走反代，建议强制开启（或再加一层反代鉴权）
 3. **事件处理器加重试**：`events.attempts` 已有字段，补 3 次退避即可
 4. **补评测用例**（议价守住底价 / 站外引流静默 / 售后转人工），把 `eval_cases` 从空表填起来

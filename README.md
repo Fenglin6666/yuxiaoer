@@ -178,7 +178,7 @@ src/yuxiaoer/
     _models.py  _views.py    请求模型 / 响应序列化
   runtime.py                 服务装配/生命周期
   main.py                    FastAPI 入口
-  static/                    单页控制台
+  static/                    单页控制台（js/app.js 入口 + js/core.js + js/pages/ 9 个页面）
 ```
 
 买方域只处理消息理解、议价、知识检索与买家回复；卖家域处理账号、商品、订单、发货、通知、平台写操作。`core/` 只放两边共享的基础设施，`shared/` 放跨域但不属于任何一方的组件（知识库、工具调用记录）。

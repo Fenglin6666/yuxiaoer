@@ -1,0 +1,122 @@
+/* 鱼小二控制台 · 观测/回放/评测（原生 ESM，无构建） */
+
+import { $, $$, CATEGORY_LABEL, S, api, chip, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, nl2br, pad, toast } from '../core.js';
+
+  // =========================================================
+  // Ops / replay / eval
+  // =========================================================
+export async function pageOps() {
+    $('#view').innerHTML = `<div class="loading-page"><span class="spinner"></span> 读取指标与轨迹…</div>`;
+    const [metrics, events, sessions, runs] = await Promise.all([
+      api('/metrics'), api('/events?limit=60'), api('/replay/sessions?limit=30'), api('/eval/runs?limit=10'),
+    ]);
+    S.ops.metrics = metrics; S.ops.events = events || []; S.ops.sessions = sessions || []; S.ops.runs = runs || [];
+    if (!S.ops.sessionId && S.ops.sessions[0]) S.ops.sessionId = S.ops.sessions[0].id;
+    if (S.ops.sessionId) S.ops.trace = await api(`/replay/${S.ops.sessionId}`).catch(() => null);
+    S.ops.lastEval = (S.ops.runs[0] && S.ops.runs[0].detail ? S.ops.runs[0] : null) || S.ops.lastEval;
+    renderOps();
+    every(async () => {
+      if (document.hidden || S.route !== 'ops') return;
+      try {
+        const [m, e] = await Promise.all([api('/metrics'), api('/events?limit=60')]);
+        S.ops.metrics = m; S.ops.events = e || [];
+        if (S.ops.tab === 'events' || S.ops.tab === 'overview') renderOps();
+      } catch (err) { /* noop */ }
+    }, 12000);
+  }
+
+export function renderOps() {
+    const m = S.ops.metrics || {}; const t = m.today || {}; const h = m.health || {};
+    const series = m.series || [];
+    const maxBar = Math.max(1, ...series.map((d) => Math.max(d.conversations || 0, d.orders || 0)));
+    const chart = `<div class="bars">${series.map((d) => `<div class="bar-col" title="${esc(d.date)}"><div class="bar-pair"><div class="bar green" style="height:${Math.max(3, (d.conversations / maxBar) * 100)}%"></div><div class="bar coral" style="height:${Math.max(2, (d.orders / maxBar) * 100)}%"></div></div><span class="bar-label">${esc(d.label)}</span></div>`).join('')}</div>`;
+    const view = $('#view');
+    view.innerHTML = `
+      <div class="page-head"><div><h2>指标、轨迹与回归</h2><p>L0 系统活着吗 · L1 客服称职吗 · L2 生意变好了吗。北极星：询单转化率。</p></div><div class="btn-row"><button class="btn sm ghost" id="opsRefresh">${icon('refresh')} 刷新</button></div></div>
+      <div class="ops-metrics">
+        ${metricCard('L0 · 通道', (S.system && S.system.channel && S.system.channel.online) ? '在线' : '离线', `事件积压 ${S.system?.events?.backlog ?? 0} · 队列 ${S.system?.queue?.depth ?? 0}`, 'activity', '')}
+        ${metricCard('L0 · 工具错误率', `${h.tool_error_rate || 0}%`, `${h.tool_calls || 0} 次调用 / 24h`, 'plug', 'amber')}
+        ${metricCard('L1 · 首响 P95', `${t.first_response_p95 || 0}s`, `P50 ${t.first_response_p50 || 0}s · 回复率 ${t.answer_rate || 0}%`, 'clock', 'coral')}
+        ${metricCard('L2 · 询单转化', `${t.conversion_rate || 0}%`, `${t.paid_orders || 0} 单 · GMV ${money(t.gmv || 0)}`, 'spark', 'purple')}
+      </div>
+      <div class="overview-grid">
+        <div class="card chart-card"><div class="card-head"><div><div class="card-title">${icon('activity')} 7 日趋势</div><div class="card-sub">会话 vs 成交 · 单位：个</div></div><div class="legend"><span><i class="g"></i>咨询</span><span><i class="c"></i>成交</span></div></div>${chart}</div>
+        <div class="card pad"><div class="card-head"><div><div class="card-title">${icon('shield')} 运行健康</div><div class="card-sub">进程内服务与护栏</div></div></div>
+          <div class="sys-row"><span>账号在线</span><strong>${(S.system && S.system.channel && S.system.channel.online) ? '在线' : '离线'}</strong></div>
+          <div class="sys-row"><span>LLM 模式</span><strong>${esc(S.system?.llm?.mode || '—')}</strong></div>
+          <div class="sys-row"><span>工具错误率</span><strong>${h.tool_error_rate || 0}%</strong></div>
+          <div class="sys-row"><span>LLM 失败率</span><strong>${h.llm_fail_rate || 0}%</strong></div>
+          <div class="sys-row"><span>事件积压</span><strong>${S.system?.events?.backlog ?? 0}</strong></div>
+          <div class="sys-row"><span>outbox 待发</span><strong>${S.system?.outbox?.pending ?? 0}</strong></div>
+          <div class="sys-row"><span>知识 chunks</span><strong>${S.system?.knowledge?.chunks ?? 0}</strong></div>
+          <div class="sys-row"><span>运行时长</span><strong>${Math.floor((S.system?.uptime_seconds || 0) / 60)} 分钟</strong></div>
+        </div>
+      </div>
+      <div class="ops-tabs">
+        <div class="tabs"><button class="tab ${S.ops.tab === 'events' ? 'active' : ''}" data-ops-tab="events">事件流</button><button class="tab ${S.ops.tab === 'replay' ? 'active' : ''}" data-ops-tab="replay">会话回放</button><button class="tab ${S.ops.tab === 'eval' ? 'active' : ''}" data-ops-tab="eval">黄金集评测</button></div>
+        <span class="tiny muted">session_id 全链路贯穿：消息 → 网关 → Agent → 工具 → 回复</span>
+      </div>
+      <div id="opsPanel"></div>`;
+    $('#opsRefresh').onclick = () => pageOps();
+    $$('[data-ops-tab]').forEach((b) => b.onclick = () => { S.ops.tab = b.dataset.opsTab; renderOpsPanel(); $$('[data-ops-tab]').forEach((x) => x.classList.toggle('active', x === b)); });
+    renderOpsPanel();
+  }
+
+export function renderOpsPanel() {
+    const panel = $('#opsPanel'); if (!panel) return;
+    if (S.ops.tab === 'replay') { renderReplayPanel(); return; }
+    if (S.ops.tab === 'eval') { renderEvalPanel(); return; }
+    panel.innerHTML = `<div class="card pad"><div class="card-head"><div><div class="card-title">${icon('activity')} 事件流</div><div class="card-sub">最近 ${S.ops.events.length} 条 · 失败会生成 P1 告警</div></div><button class="btn xs ghost" id="eventsRefresh">${icon('refresh')}</button></div><div class="event-table">${S.ops.events.map((e) => `<div class="event-row"><span class="event-topic" title="${esc(e.topic)}">${esc(e.topic)}</span><span class="event-payload">${esc(compactPayload(e.payload))}</span><span class="chip ${e.status === 'done' ? 'green' : e.status === 'failed' ? 'red' : 'amber'}">${esc(e.status)}</span><span class="event-time">${esc(e.created_human || '')}</span></div>`).join('') || emptyBlock('暂无事件', '', 'activity')}</div></div>`;
+    $('#eventsRefresh').onclick = async () => { S.ops.events = await api('/events?limit=60'); renderOpsPanel(); };
+  }
+
+export async function renderReplayPanel() {
+    const panel = $('#opsPanel'); if (!panel) return;
+    panel.innerHTML = `<div class="card pad"><div class="replay-layout"><div class="replay-sessions">${S.ops.sessions.map((s) => `<div class="rs-item ${s.id === S.ops.sessionId ? 'active' : ''}" data-session="${esc(s.id)}"><strong>${esc(s.buyer_nick || '买家')} · ${esc(s.item_title || '—')}</strong><small>${esc(s.last_at_human || '')} · ${s.message_count || 0} 消息 / ${s.turn_count || 0} 轮</small></div>`).join('') || emptyBlock('暂无会话', '', 'chat')}</div><div class="replay-trace" id="replayTrace">${renderTraceHtml()}</div></div></div>`;
+    panel.querySelectorAll('[data-session]').forEach((el) => { el.onclick = async () => { S.ops.sessionId = el.dataset.session; S.ops.trace = await api(`/replay/${S.ops.sessionId}`); renderReplayPanel(); }; });
+    const exportBtn = $('#exportTrace'); if (exportBtn) exportBtn.onclick = () => downloadTrace();
+  }
+
+export function renderTraceHtml() {
+    const t = S.ops.trace;
+    if (!t) return emptyBlock('选择一个会话', '左侧列表来自真实消息与 turns', 'activity');
+    const conv = t.conversation || {}; const item = t.item; const buyer = t.buyer;
+    return `<div class="flex-between mb12"><div><strong style="font-size:13px">${esc(buyer?.nick || '买家')} · ${esc(item?.title || '无商品')}</strong><div class="tiny muted">${esc(conv.session_id || '')} · 创建 ${esc(fmtTime(conv.created_at, true))}</div></div><button class="btn xs ghost" id="exportTrace">${icon('download')} 导出轨迹</button></div><div class="replay-timeline">${(t.timeline || []).map((x) => `<div class="rt-item ${esc(x.type)}"><div class="rt-head"><strong>${esc(x.title)}</strong><time>${esc(fmtTime(x.ts))}</time></div><div class="rt-text">${nl2br(String(x.text || '').slice(0, 600))}</div>${x.type === 'tool' || x.type === 'event' ? `<div class="rt-json">${esc(compactPayload(x.meta))}</div>` : ''}</div>`).join('')}</div>`;
+  }
+
+export function downloadTrace() {
+    const blob = new Blob([JSON.stringify(S.ops.trace, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url; a.download = `yuxiaoer-replay-${S.ops.sessionId}.json`; a.click(); URL.revokeObjectURL(url);
+  }
+
+export function renderEvalPanel() {
+    const panel = $('#opsPanel'); if (!panel) return;
+    const last = S.ops.lastEval || (S.ops.runs[0] && S.ops.runs[0].detail ? S.ops.runs[0] : null);
+    const detail = last ? (last.detail || []) : [];
+    const total = last ? last.total : (detail.length || 0);
+    const score = last ? Number(last.score || 0) : 0;
+    const failed = detail.filter((d) => !d.passed);
+    const llm = (S.system && S.system.llm) || {};
+    panel.innerHTML = `<div class="card pad">
+      <div class="eval-hero"><div class="eval-score" style="--pct:${score}"><span>${score}</span></div><div class="grow"><div class="card-title">${icon('spark')} 黄金问答集</div><div class="muted tiny mt8">${last ? `最近运行 ${esc(fmtTime(last.finished_at || last.started_at, true))} · 判分 ${esc(last.judge_mode || 'rules')}` : '还没有运行过。50 条真实场景 + 期望动作 + 必含词 + 红线。'}</div><div class="flex mt12"><button class="btn primary" id="runEvalBtn">${icon('play')} 运行黄金集（50 条）</button><span class="tiny muted">${llm.enabled ? '可启用 LLM-as-judge' : '当前规则判分；配置 LLM 后可启用 judge'}</span></div></div><div class="right"><div class="kv-box"><small>通过</small><strong>${last ? last.passed : 0} / ${total || 50}</strong></div><div class="kv-box mt8"><small>红线失败</small><strong style="color:${last && last.redline_failures ? 'var(--danger)' : 'var(--ink)'}">${last ? last.redline_failures : 0}</strong></div></div></div>
+      <div class="divider"></div>
+      ${last ? `<div class="grid-4 mb12"><div class="kv-box"><small>意图匹配</small><strong>${detail.filter((d) => d.checks.category).length} / ${detail.length}</strong></div><div class="kv-box"><small>动作匹配</small><strong>${detail.filter((d) => d.checks.action).length} / ${detail.length}</strong></div><div class="kv-box"><small>必含词</small><strong>${detail.filter((d) => d.checks.must_include).length} / ${detail.length}</strong></div><div class="kv-box"><small>红线</small><strong>${detail.filter((d) => d.checks.redline).length} / ${detail.length}</strong></div></div>
+      ${failed.length ? `<div class="notice red mb12">${icon('alert')} 有 ${failed.length} 条未通过：${failed.slice(0, 5).map((d) => esc(d.input)).join('、')}${failed.length > 5 ? '…' : ''}</div>` : `<div class="notice mb12">${icon('check')} 全部通过。回归红线：转人工率不升、违规词为 0。</div>`}
+      <div style="max-height:420px;overflow:auto">${detail.map((d) => `<div class="eval-row"><div class="er-top">${d.passed ? chip('通过', 'green') : chip('失败', 'red')}<span class="er-input">${esc(d.input)}</span><span class="type-tag">${esc(CATEGORY_LABEL[d.actual_category] || d.actual_category)}</span><span class="type-tag">${esc(d.actual_action)}</span></div><div class="er-reply">${esc(d.reply || '（静默）')}</div><div class="eval-checks mt8">${Object.entries(d.checks || {}).map(([k, v]) => `<span class="eval-check ${v ? '' : 'bad'}">${esc(k)}</span>`).join('')}</div></div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">${icon('spark')}</div><strong>让回归成为习惯</strong>修改 prompt / 换模型前，先跑一遍黄金集。</div>`}
+    </div>`;
+    const runBtn = $('#runEvalBtn'); if (runBtn) runBtn.onclick = runEval;
+  }
+
+export async function runEval() {
+    const btn = $('#runEvalBtn'); if (!btn || S.ops.busy) return;
+    S.ops.busy = true; btn.disabled = true; btn.innerHTML = `<span class="spinner" style="width:13px;height:13px;border-width:2px"></span> 运行中…`;
+    try {
+      const llm = (S.system && S.system.llm) || {};
+      const result = await api('/eval/run', { method: 'POST', body: { judge_mode: llm.enabled ? 'llm' : 'rules' } });
+      S.ops.lastEval = result;
+      S.ops.runs.unshift(result);
+      toast(`评测完成：${result.passed}/${result.total}，得分 ${result.score}`);
+      renderEvalPanel();
+    } catch (e) { toast(e.message, 'error'); } finally { S.ops.busy = false; if ($('#runEvalBtn')) { $('#runEvalBtn').disabled = false; } }
+  }
