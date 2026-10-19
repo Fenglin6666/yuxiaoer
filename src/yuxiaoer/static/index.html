@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0d2b24" />
+  <title>鱼小二 · 托管客服</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar">
+      <a class="brand" href="#/overview" aria-label="鱼小二首页">
+        <span class="brand-mark" id="brandMark"></span>
+        <span class="brand-text">
+          <strong>鱼小二</strong>
+          <small>托管客服 · 24h</small>
+        </span>
+      </a>
+
+      <div class="shop-card" id="shopCard">
+        <span class="shop-avatar">小</span>
+        <div>
+          <strong id="shopName">我的闲鱼小店</strong>
+          <small><i class="dot" id="sideDot"></i><span id="sideStatus">原生通道未连接</span></small>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav"></nav>
+
+      <div class="sidebar-foot">
+        <div class="mini-status">
+          <div class="row"><span>托管状态</span><strong id="sideHosted">运行中</strong></div>
+          <div class="row"><span>版本</span><span>R2 · v0.3.1 真实通道</span></div>
+        </div>
+        <p class="disclaimer">原生协议存在平台风险<br />请使用小号并控制频率</p>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1 id="pageTitle">总览</h1>
+          <p id="pageSubtitle">鱼小二正在替你值班</p>
+        </div>
+        <div class="topbar-actions">
+          <span class="status-chip" id="channelChip"><i class="dot"></i>通道在线</span>
+          <span class="status-chip subtle" id="llmChip">规则模式</span>
+          <span class="status-chip offline hidden" id="riskChip">风控熔断</span>
+          <button class="icon-btn" id="alertBtn" title="告警中心" aria-label="告警中心">
+            <span id="bellIcon"></span><em id="alertBadge" class="badge hidden">0</em>
+          </button>
+        </div>
+      </header>
+      <main class="view" id="view">
+        <div class="loading-page"><span class="spinner"></span> 正在唤醒鱼小二…</div>
+      </main>
+    </div>
+  </div>
+
+  <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
+  <div id="modalRoot"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

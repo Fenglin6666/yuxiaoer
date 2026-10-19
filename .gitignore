@@ -1,0 +1,24 @@
+# runtime data & secrets
+data/
+.env
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# dev screenshots / scratch
+data/shots/
+scratch/
+
+# os / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
