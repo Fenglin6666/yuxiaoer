@@ -217,6 +217,7 @@ src/yuxiaoer/
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `YUXIAOER_EXTERNAL_SECRET` | `yx-local-secret` | 外部接口共享秘钥 |
+| `YUXIAOER_CONSOLE_USER` / `YUXIAOER_CONSOLE_PASSWORD` | 空 | 可选控制台 Basic Auth；两项都设置才启用 |
 | `XY_APP_KEY` | `34839810` | mtop appKey |
 | `XY_WS_URL` | `wss://wss-goofish.dingtalk.com/` | IM WebSocket |
 | `XY_ORDER_SYNC_SECONDS` | `60` | 订单同步周期 |
@@ -234,7 +235,7 @@ $env:PYTHONPATH="D:\yuxiaoer\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-当前保留纯规则/协议测试（20 个）；mock/E2E 演示测试已随模拟功能删除。
+当前保留纯规则/协议/鉴权测试（25 个）；mock/E2E 演示测试已随模拟功能删除。
 真实 WS/订单需要小号现场联调，不以测试代替。
 
 ## 8. 边界（诚实声明）
@@ -242,7 +243,7 @@ $env:PYTHONPATH="D:\yuxiaoer\src"
 1. 原生**发布/下架/改价/擦亮**已接入 mtop：`idleitem.publish`、`item.batch.offline`、`item.info.update`、`item.polish`；逻辑完成，需小号现场验证。发布需要图片和描述；分类走平台推荐，地址有城市兜底；`AMAP_KEY` 可选。
 2. 人脸验证/滑块/验证码：不自动化；扫码要求人脸时只提示，用户自行完成。
 3. 企业微信只做出站 webhook，未做入站。
-4. 无登录鉴权、多租户、向量检索、真实支付退款、自动关单/自动下单。
+4. 控制台默认只监听 127.0.0.1；可选 Basic Auth（`YUXIAOER_CONSOLE_USER/PASSWORD`）。无多租户、向量检索、真实支付退款、自动关单/自动下单。
 5. 原生 WebSocket 现场收发尚未用真实小号验证；逻辑/帧已实现，扫码生成已实测。
 6. 外部接口不提供发布/分类；没有数据时返回空列表，不生成假数据。
 

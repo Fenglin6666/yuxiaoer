@@ -2,7 +2,7 @@
 
 > 梳理日期：2026-10-18 ｜ 结构重整：2026-10-19（api 包 / seller mixin / shared 层）｜ 版本 v0.3.1
 >
-> 规模：Python 12,498 行 / 前端约 2,826 行 / 74 个模块 / 82 个 HTTP 操作 / 20 个单测（全绿）
+> 规模：Python 12,498 行 / 前端约 2,826 行 / 74 个模块 / 82 个 HTTP 操作 / 25 个单测（全绿）
 
 ---
 
@@ -185,7 +185,7 @@ order: new → paid → shipped → delivered → done
 
 | # | 问题 | 证据 | 影响 |
 |---|---|---|---|
-| 1 | **无任何鉴权** | `api/` 包无 middleware / Depends；82 个 HTTP 操作全裸 | 监听 127.0.0.1 时风险可控；一旦按 `YUXIAOER_PUBLIC_URL` 暴露到局域网/公网，任何人可发消息、改价、上架、看 Cookie |
+| 1 | ~~无任何鉴权~~ **已提供可选 Basic Auth** | `YUXIAOER_CONSOLE_USER/PASSWORD` 两项都设置后，除 `/api/health` 与外部接口外全部要求 Basic 凭据；默认关闭 | 默认仍靠 `127.0.0.1`；暴露到局域网/公网时务必设置 |
 | 2 | ~~两个巨型 Agent 文件~~ **已处理** | 2026-10-19：`seller/agent.py` 1,191 → 181 行，拆成 `commands/` 4 个 mixin；`api.py` 1,241 行 → `api/` 9 个领域路由 | 剩余热点：`buyer/conversation/agent.py` 637 行 |
 | 3 | ~~域边界是目录级的~~ **已部分处理** | `ToolBox`/`KnowledgeService` 迁到 `shared/`；`seller → buyer` 运行时依赖归零；`buyer → seller` 仍有 4 处（告警/确认/消息） | 剩余 4 条是买家回复链路的必要依赖，下一步可用协议接口反转 |
 | 4 | **事件处理器无重试** | `events._dispatch` 失败仅标 failed + 告警 | `order.paid` 处理器异常 → 自动发货静默丢失，只能人工补发 |
@@ -216,7 +216,7 @@ risk 未熔断 · queue 正常 · outbox 无积压 · LLM 规则模式
 ## 11. 如果要继续演进，优先级建议
 
 1. **拆前端 `static/app.js`**（1,898 行、90 个函数、全局 `S`）：按 `js/core.js` + `js/pages/*.js` 走原生 ESM，无构建；拆完需要浏览器逐页回归
-2. **加鉴权**（本机 token 或反代 Basic Auth）——唯一"一条命令就能被打穿"的风险
+2. **鉴权**：已提供可选 Basic Auth；若监听 0.0.0.0 或走反代，建议强制开启（或再加一层反代鉴权）
 3. **事件处理器加重试**：`events.attempts` 已有字段，补 3 次退避即可
 4. **补评测用例**（议价守住底价 / 站外引流静默 / 售后转人工），把 `eval_cases` 从空表填起来
-5. **补测试**：当前 20 个单测覆盖 12.5k 行；优先给 `api/` 路由加 ASGI 冒烟、给 `commands/` 加参数补全测试
+5. **补测试**：当前 25 个单测覆盖 12.5k 行；优先给 `api/` 路由加 ASGI 冒烟、给 `commands/` 加参数补全测试

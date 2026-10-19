@@ -23,6 +23,10 @@ PORT = int(os.getenv("YUXIAOER_PORT", "8787"))
 # 邮件里的确认链接使用这个地址；手机/其他设备打开时改成局域网或公网地址。
 PUBLIC_BASE_URL = os.getenv("YUXIAOER_PUBLIC_URL", f"http://{HOST}:{PORT}").rstrip("/")
 
+# 控制台 Basic Auth（可选）：两项都非空才启用；留空时仍只依赖 127.0.0.1 绑定。
+CONSOLE_USER = os.getenv("YUXIAOER_CONSOLE_USER", "").strip()
+CONSOLE_PASSWORD = os.getenv("YUXIAOER_CONSOLE_PASSWORD", "").strip()
+
 TZ = timezone(timedelta(hours=8))
 APP_NAME = "鱼小二"
 APP_TAGLINE = "托管客服 · 24h 在线"
