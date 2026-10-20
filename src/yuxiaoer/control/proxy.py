@@ -69,6 +69,30 @@ class ShopProxy:
         data = await self.request(shop, "POST", "/api/seller/message", {"text": text})
         return data if isinstance(data, dict) else {}
 
+    async def status(self, shop: Shop) -> dict[str, Any]:
+        data = await self.request(shop, "GET", "/api/status")
+        return data if isinstance(data, dict) else {}
+
+    async def accounts(self, shop: Shop) -> list[dict[str, Any]]:
+        data = await self.request(shop, "GET", "/api/accounts")
+        return data if isinstance(data, list) else []
+
+    async def create_account(self, shop: Shop, nickname: str) -> dict[str, Any]:
+        data = await self.request(shop, "POST", "/api/accounts", {"nickname": nickname or "闲鱼账号"})
+        return data if isinstance(data, dict) else {}
+
+    async def login_start(self, shop: Shop, account_id: str) -> dict[str, Any]:
+        data = await self.request(shop, "POST", f"/api/accounts/{account_id}/login/start")
+        return data if isinstance(data, dict) else {}
+
+    async def login_status(self, shop: Shop, account_id: str) -> dict[str, Any]:
+        data = await self.request(shop, "GET", f"/api/accounts/{account_id}/login/status")
+        return data if isinstance(data, dict) else {}
+
+    async def sync_account(self, shop: Shop, account_id: str) -> dict[str, Any]:
+        data = await self.request(shop, "POST", f"/api/accounts/{account_id}/sync", {})
+        return data if isinstance(data, dict) else {}
+
     async def confirm(self, shop: Shop, confirmation_id: str, action: str) -> dict[str, Any]:
         if action not in ("confirm", "cancel"):
             raise HTTPException(400, "未知确认操作")

@@ -1,10 +1,10 @@
-"""店铺注册表：JSON 持久化，一店一条记录。"""
+"""闲鱼账号实例注册表：一个实例 = 一个真实闲鱼账号的工作目录。"""
 
 from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +13,8 @@ from yuxiaoer.core import config
 DEFAULT_SHOPS: list[dict[str, Any]] = [
     {
         "id": "default",
-        "name": "我的店",
+        "name": "闲鱼账号",
         "port": 8787,
-        "owner": "admin",
         "enabled": True,
         "auto_start": True,
         "auto_restart": True,
@@ -32,7 +31,6 @@ class Shop:
     id: str
     name: str
     port: int
-    owner: str = "admin"
     enabled: bool = True
     auto_start: bool = True
     auto_restart: bool = True
@@ -49,7 +47,7 @@ class ShopRegistry:
     def __init__(self, path: Path | None = None):
         self.path = path or Path(
             os.getenv("YUXIAOER_CONTROL_DIR", config.PROJECT_ROOT / "data" / "control")
-        ) / "shops.json"
+        ) / "accounts.json"
         self._shops: dict[str, Shop] = {}
         self.load()
 
@@ -62,13 +60,16 @@ class ShopRegistry:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = []
+        allowed = {item.name for item in fields(Shop)}
         self._shops = {}
         for row in data:
+            if not isinstance(row, dict):
+                continue
             try:
-                shop = Shop(**row)
+                shop = Shop(**{key: value for key, value in row.items() if key in allowed})
                 shop.id = config.normalize_shop_id(shop.id)
                 self._shops[shop.id] = shop
-            except TypeError:
+            except (TypeError, ValueError):
                 continue
 
     def save(self) -> None:
@@ -80,39 +81,40 @@ class ShopRegistry:
         )
         tmp.replace(self.path)
 
-    def list(
-        self, *, owner: str | None = None, is_admin: bool = False,
-        allowed: list[str] | None = None,
-    ) -> list[Shop]:
-        shops = sorted(self._shops.values(), key=lambda shop: shop.id)
-        if is_admin or (allowed and "*" in allowed):
-            return shops
-        if allowed is not None:
-            return [shop for shop in shops if shop.id in allowed]
-        if owner:
-            return [shop for shop in shops if shop.owner == owner]
-        return shops
+    def list(self) -> list[Shop]:
+        return sorted(self._shops.values(), key=lambda shop: shop.id)
 
     def get(self, shop_id: str) -> Shop | None:
         return self._shops.get(config.normalize_shop_id(shop_id))
 
+    def next_port(self) -> int:
+        used = {shop.port for shop in self._shops.values()}
+        port = 8787
+        while port in used:
+            port += 1
+        return port
+
     def upsert(self, payload: dict[str, Any]) -> Shop:
-        shop_id = config.normalize_shop_id(str(payload.get("id") or ""))
-        if not shop_id:
-            raise ValueError("店铺 ID 不能为空")
-        port = int(payload.get("port") or 0)
+        raw_id = str(payload.get("id") or "").strip()
+        current = self._shops.get(config.normalize_shop_id(raw_id)) if raw_id else None
+        if current:
+            shop_id = current.id
+        else:
+            candidate = config.normalize_shop_id(raw_id or str(payload.get("name") or ""))
+            shop_id = "acct_" + candidate if candidate != "default" else f"acct_{len(self._shops) + 1}"
+            if shop_id == "acct_default":
+                shop_id = f"acct_{len(self._shops) + 1}"
+        port = int(payload.get("port") or (current.port if current else self.next_port()))
         if not 1 <= port <= 65535:
             raise ValueError("端口必须在 1-65535")
         for other in self._shops.values():
             if other.id != shop_id and other.port == port:
-                raise ValueError(f"端口 {port} 已被店铺 {other.id} 使用")
-        current = self._shops.get(shop_id)
+                raise ValueError(f"端口 {port} 已被账号 {other.id} 使用")
         data = current.to_dict() if current else {}
         data.update({
             "id": shop_id,
-            "name": str(payload.get("name") or data.get("name") or shop_id).strip()[:80],
+            "name": str(payload.get("name") or data.get("name") or "闲鱼账号").strip()[:80],
             "port": port,
-            "owner": str(payload.get("owner") or data.get("owner") or "admin").strip()[:40],
             "enabled": bool(payload.get("enabled", data.get("enabled", True))),
             "auto_start": bool(payload.get("auto_start", data.get("auto_start", True))),
             "auto_restart": bool(payload.get("auto_restart", data.get("auto_restart", True))),

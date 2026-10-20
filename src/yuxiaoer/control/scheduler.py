@@ -77,7 +77,7 @@ class ShopScheduler:
 
     async def tick(self, now: datetime | None = None) -> None:
         now = now or datetime.now(config.TZ)
-        for shop in self.registry.list(is_admin=True):
+        for shop in self.registry.list():
             if not shop.enabled:
                 continue
             try:

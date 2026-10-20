@@ -29,31 +29,30 @@ Invoke-WebRequest http://127.0.0.1:8787/api/health
 Invoke-WebRequest http://127.0.0.1:8787/api/status
 ```
 
-## 1.1 多店（一店一实例）
+## 1.1 多账号（一账号一实例）
 
 ```powershell
-# 默认店（沿用 data/）
+# 默认账号（沿用 data/）
 .\run.ps1
 
-# 新店：独立端口 + data/shops/<shop_id>/
+# 新账号：独立端口 + data/shops/<id>/
 .\run.ps1 -ShopId shop-b -Port 8788
 .\run.ps1 -ShopId shop-c -Port 8789
 ```
 
-每个店独立账号、SQLite、写队列、值守任务；不要给多个店设置同一个 `YUXIAOER_DATA_DIR`。详见 `docs/MULTI-SHOP.md`。
+每个账号独立扫码、SQLite、写队列、值守任务；不要给多个账号设置同一个 `YUXIAOER_DATA_DIR`。详见 `docs/MULTI-SHOP.md`。
 
-## 1.2 多店控制面
+## 1.2 多账号控制台
 
 ```powershell
 .\run-control.ps1 -Port 8790
 ```
 
 - 默认只监听 `127.0.0.1`，本机打开即用，**不需要密码**；
-- 注册表：`data/control/shops.json`；
-- 用户：`data/control/users.json`（仅开启鉴权时使用）；
-- 日志：`data/control/logs/<shop_id>.log`；
-- 控制面负责启动/停止/重启、10 秒健康检查、异常重启、排期写回、告警/日报汇总；
-- 控制面只管理由它启动的店铺进程；已有手工实例先停掉，避免端口冲突。
+- 注册表：`data/control/accounts.json`；
+- 日志：`data/control/logs/<id>.log`；
+- 控制台负责启动/停止/重启、10 秒健康检查、异常重启、扫码登录、排期写回、告警/日报汇总；
+- 添加账号后点「扫码登录」，用真实闲鱼账号扫码；控制台只管理由它启动的账号实例。
 
 ## 2. 首次启动
 
@@ -170,7 +169,7 @@ $env:PYTHONPATH = "<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-当前 74 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
+当前 69 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
 
 ## 12. 已知限制
 

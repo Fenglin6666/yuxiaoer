@@ -1,4 +1,4 @@
-"""多店控制面：注册表、进程守护、排期、汇总、按店权限。"""
+"""个人多账号控制台：真实闲鱼账号的启动、扫码、会话与店主指令。"""
 
 from __future__ import annotations
 
@@ -7,49 +7,28 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from .aggregator import ShopAggregator
-from .auth import ControlUser, UserRegistry
 from .proxy import ShopProxy
 from .registry import ShopRegistry
 from .scheduler import ShopScheduler
 from .supervisor import ShopSupervisor
 
-security = HTTPBasic(auto_error=False)
 STATIC = Path(__file__).parent / "static" / "control.html"
 
 
-def current_user(request: Request, credentials: HTTPBasicCredentials | None = Depends(security)) -> ControlUser:
-    if os.getenv("YUXIAOER_CONTROL_AUTH", "0") not in ("1", "true", "on"):
-        return ControlUser("local", "", "admin", ["*"])
-    if credentials is None:
-        raise HTTPException(401, "需要登录", headers={"WWW-Authenticate": "Basic"})
-    user = request.app.state.users.authenticate(credentials.username, credentials.password)
-    if user is None:
-        raise HTTPException(401, "用户名或密码错误", headers={"WWW-Authenticate": "Basic"})
-    return user
-
-
-def admin_only(user: ControlUser = Depends(current_user)) -> ControlUser:
-    if user.role != "admin":
-        raise HTTPException(403, "需要管理员权限")
-    return user
-
-
-def allowed_shop(request: Request, user: ControlUser, shop_id: str):
+def get_shop(request: Request, shop_id: str):
     shop = request.app.state.registry.get(shop_id)
-    if shop is None or not user.can_access(shop.id):
-        raise HTTPException(404, "店铺不存在")
+    if shop is None:
+        raise HTTPException(404, "账号实例不存在")
     return shop
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.registry = ShopRegistry()
-    app.state.users = UserRegistry()
     app.state.supervisor = ShopSupervisor(app.state.registry)
     app.state.scheduler = ShopScheduler(app.state.registry)
     app.state.aggregator = ShopAggregator()
@@ -63,52 +42,87 @@ async def lifespan(app: FastAPI):
     await app.state.supervisor.shutdown()
 
 
-app = FastAPI(title="鱼小二 · 多店控制面", lifespan=lifespan)
+app = FastAPI(title="鱼小二 · 多账号控制台", lifespan=lifespan)
 
 
 @app.get("/")
-async def index(user: ControlUser = Depends(current_user)):
+async def index():
     return FileResponse(STATIC)
 
 
-@app.get("/api/control/me")
-async def me(user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    return {"username": user.username, "role": user.role, "shops": user.shops}
+@app.get("/api/control/accounts")
+async def list_accounts(request: Request) -> dict[str, Any]:
+    rows = []
+    for shop in request.app.state.registry.list():
+        status = await request.app.state.supervisor.status(shop)
+        account = None
+        if status.get("running"):
+            try:
+                live = await request.app.state.proxy.status(shop)
+                account = live.get("account")
+            except HTTPException:
+                account = None
+        status["account"] = account
+        rows.append(status)
+    return {"accounts": rows}
 
 
-@app.get("/api/control/shops")
-async def list_shops(request: Request, user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    shops = request.app.state.registry.list(
-        owner=user.username, is_admin=user.role == "admin", allowed=user.shops
-    )
-    rows = [await request.app.state.supervisor.status(shop) for shop in shops]
-    return {"shops": rows}
-
-
-@app.post("/api/control/shops")
-async def upsert_shop(request: Request, payload: dict[str, Any], user: ControlUser = Depends(admin_only)) -> dict[str, Any]:
+@app.post("/api/control/accounts")
+async def create_account(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     try:
-        shop = request.app.state.registry.upsert(payload)
+        shop = request.app.state.registry.upsert({
+            "name": payload.get("name") or "闲鱼账号",
+            "enabled": True,
+            "auto_start": True,
+            "auto_restart": True,
+        })
     except (ValueError, TypeError) as exc:
         raise HTTPException(400, str(exc)) from exc
     request.app.state.scheduler.invalidate(shop.id)
-    if payload.get("auto_start"):
-        await request.app.state.supervisor.start(shop)
-    return {"ok": True, "shop": shop.to_dict()}
+    await request.app.state.supervisor.start(shop)
+    return {"ok": True, "account": shop.to_dict()}
 
 
-@app.delete("/api/control/shops/{shop_id}")
-async def delete_shop(request: Request, shop_id: str, user: ControlUser = Depends(admin_only)) -> dict[str, Any]:
+@app.delete("/api/control/accounts/{shop_id}")
+async def delete_account(request: Request, shop_id: str) -> dict[str, Any]:
     shop = request.app.state.registry.get(shop_id)
     if shop is not None:
         await request.app.state.supervisor.stop(shop)
     if not request.app.state.registry.delete(shop_id):
-        raise HTTPException(404, "店铺不存在")
+        raise HTTPException(404, "账号实例不存在")
     return {"ok": True}
 
 
-async def _shop_action(request: Request, user: ControlUser, shop_id: str, action: str) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+@app.post("/api/control/accounts/{shop_id}/login/start")
+async def login_start(request: Request, shop_id: str) -> dict[str, Any]:
+    shop = get_shop(request, shop_id)
+    proxy: ShopProxy = request.app.state.proxy
+    accounts = await proxy.accounts(shop)
+    if not accounts:
+        created = await proxy.create_account(shop, shop.name)
+        account_id = created.get("id")
+        if not account_id:
+            raise HTTPException(502, "创建账号失败")
+    else:
+        account_id = accounts[0].get("id")
+    data = await proxy.login_start(shop, str(account_id))
+    return {"ok": True, "account_id": account_id, **data}
+
+
+@app.get("/api/control/accounts/{shop_id}/login/status")
+async def login_status(request: Request, shop_id: str, account_id: str) -> dict[str, Any]:
+    shop = get_shop(request, shop_id)
+    return await request.app.state.proxy.login_status(shop, account_id)
+
+
+@app.post("/api/control/accounts/{shop_id}/login/sync")
+async def login_sync(request: Request, shop_id: str, account_id: str) -> dict[str, Any]:
+    shop = get_shop(request, shop_id)
+    return await request.app.state.proxy.sync_account(shop, account_id)
+
+
+async def _account_action(request: Request, shop_id: str, action: str) -> dict[str, Any]:
+    shop = get_shop(request, shop_id)
     supervisor = request.app.state.supervisor
     if action == "start":
         return await supervisor.start(shop)
@@ -119,68 +133,38 @@ async def _shop_action(request: Request, user: ControlUser, shop_id: str, action
     raise HTTPException(400, "未知操作")
 
 
-@app.post("/api/control/shops/{shop_id}/start")
-async def start_shop(request: Request, shop_id: str, user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    return await _shop_action(request, user, shop_id, "start")
+@app.post("/api/control/accounts/{shop_id}/start")
+async def start_account(request: Request, shop_id: str) -> dict[str, Any]:
+    return await _account_action(request, shop_id, "start")
 
 
-@app.post("/api/control/shops/{shop_id}/stop")
-async def stop_shop(request: Request, shop_id: str, user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    return await _shop_action(request, user, shop_id, "stop")
+@app.post("/api/control/accounts/{shop_id}/stop")
+async def stop_account(request: Request, shop_id: str) -> dict[str, Any]:
+    return await _account_action(request, shop_id, "stop")
 
 
-@app.post("/api/control/shops/{shop_id}/restart")
-async def restart_shop(request: Request, shop_id: str, user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    return await _shop_action(request, user, shop_id, "restart")
+@app.post("/api/control/accounts/{shop_id}/restart")
+async def restart_account(request: Request, shop_id: str) -> dict[str, Any]:
+    return await _account_action(request, shop_id, "restart")
 
 
-@app.post("/api/control/shops/{shop_id}/sync")
-async def sync_shop(request: Request, shop_id: str, user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+@app.post("/api/control/accounts/{shop_id}/sync")
+async def sync_account(request: Request, shop_id: str) -> dict[str, Any]:
+    shop = get_shop(request, shop_id)
     return await request.app.state.scheduler.sync_shop_items(shop)
 
 
-@app.post("/api/control/shops/{shop_id}/schedule")
-async def schedule_shop(request: Request, shop_id: str, user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+@app.post("/api/control/accounts/{shop_id}/schedule")
+async def schedule_account(request: Request, shop_id: str) -> dict[str, Any]:
+    shop = get_shop(request, shop_id)
     return await request.app.state.scheduler.apply_schedule(shop)
-
-
-@app.get("/api/control/overview")
-async def overview(request: Request, user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    shops = request.app.state.registry.list(
-        owner=user.username, is_admin=user.role == "admin", allowed=user.shops
-    )
-    return await request.app.state.aggregator.overview(shops)
-
-
-@app.get("/api/control/alerts")
-async def alerts(request: Request, status: str = "open", user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    shops = request.app.state.registry.list(
-        owner=user.username, is_admin=user.role == "admin", allowed=user.shops
-    )
-    return {"alerts": await request.app.state.aggregator.alerts(shops, status)}
-
-
-@app.get("/api/control/daily")
-async def daily(request: Request, user: ControlUser = Depends(current_user)) -> dict[str, Any]:
-    shops = request.app.state.registry.list(
-        owner=user.username, is_admin=user.role == "admin", allowed=user.shops
-    )
-    return await request.app.state.aggregator.daily(shops)
 
 
 @app.get("/api/control/workbench/conversations")
 async def workbench_conversations(
-    request: Request, shop_id: str = "", filter: str = "active",
-    user: ControlUser = Depends(current_user),
+    request: Request, shop_id: str = "", filter: str = "active"
 ) -> dict[str, Any]:
-    if shop_id:
-        shops = [allowed_shop(request, user, shop_id)]
-    else:
-        shops = request.app.state.registry.list(
-            owner=user.username, is_admin=user.role == "admin", allowed=user.shops
-        )
+    shops = [get_shop(request, shop_id)] if shop_id else request.app.state.registry.list()
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     for shop in shops:
@@ -197,11 +181,8 @@ async def workbench_conversations(
 
 
 @app.get("/api/control/workbench/{shop_id}/conversations/{conversation_id}")
-async def workbench_conversation(
-    request: Request, shop_id: str, conversation_id: str,
-    user: ControlUser = Depends(current_user),
-) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+async def workbench_conversation(request: Request, shop_id: str, conversation_id: str) -> dict[str, Any]:
+    shop = get_shop(request, shop_id)
     data = await request.app.state.proxy.conversation(shop, conversation_id)
     data["shop_id"] = shop.id
     data["shop_name"] = shop.name
@@ -210,10 +191,9 @@ async def workbench_conversation(
 
 @app.post("/api/control/workbench/{shop_id}/conversations/{conversation_id}/reply")
 async def workbench_reply(
-    request: Request, shop_id: str, conversation_id: str, payload: dict[str, Any],
-    user: ControlUser = Depends(current_user),
+    request: Request, shop_id: str, conversation_id: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+    shop = get_shop(request, shop_id)
     text = str(payload.get("text") or "").strip()
     if not text:
         raise HTTPException(400, "回复内容不能为空")
@@ -222,10 +202,9 @@ async def workbench_reply(
 
 @app.post("/api/control/workbench/{shop_id}/conversations/{conversation_id}/{action}")
 async def workbench_conversation_action(
-    request: Request, shop_id: str, conversation_id: str, action: str,
-    user: ControlUser = Depends(current_user),
+    request: Request, shop_id: str, conversation_id: str, action: str
 ) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+    shop = get_shop(request, shop_id)
     if action == "takeover":
         return await request.app.state.proxy.takeover(shop, conversation_id)
     if action == "resume":
@@ -234,10 +213,8 @@ async def workbench_conversation_action(
 
 
 @app.get("/api/control/workbench/{shop_id}/seller")
-async def workbench_seller(
-    request: Request, shop_id: str, user: ControlUser = Depends(current_user)
-) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+async def workbench_seller(request: Request, shop_id: str) -> dict[str, Any]:
+    shop = get_shop(request, shop_id)
     data = await request.app.state.proxy.seller_messages(shop)
     data["shop_id"] = shop.id
     data["shop_name"] = shop.name
@@ -246,10 +223,9 @@ async def workbench_seller(
 
 @app.post("/api/control/workbench/{shop_id}/seller")
 async def workbench_seller_send(
-    request: Request, shop_id: str, payload: dict[str, Any],
-    user: ControlUser = Depends(current_user),
+    request: Request, shop_id: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+    shop = get_shop(request, shop_id)
     text = str(payload.get("text") or "").strip()
     if not text:
         raise HTTPException(400, "指令不能为空")
@@ -258,42 +234,22 @@ async def workbench_seller_send(
 
 @app.post("/api/control/workbench/{shop_id}/confirmations/{confirmation_id}/{action}")
 async def workbench_confirm(
-    request: Request, shop_id: str, confirmation_id: str, action: str,
-    user: ControlUser = Depends(current_user),
+    request: Request, shop_id: str, confirmation_id: str, action: str
 ) -> dict[str, Any]:
-    shop = allowed_shop(request, user, shop_id)
+    shop = get_shop(request, shop_id)
     return await request.app.state.proxy.confirm(shop, confirmation_id, action)
 
 
-@app.get("/api/control/users")
-async def list_users(request: Request, user: ControlUser = Depends(admin_only)) -> dict[str, Any]:
-    return {
-        "users": [
-            {"username": item.username, "role": item.role, "shops": item.shops}
-            for item in request.app.state.users.list()
-        ]
-    }
+@app.get("/api/control/overview")
+async def overview(request: Request) -> dict[str, Any]:
+    return await request.app.state.aggregator.overview(request.app.state.registry.list())
 
 
-@app.post("/api/control/users")
-async def upsert_user(request: Request, payload: dict[str, Any], user: ControlUser = Depends(admin_only)) -> dict[str, Any]:
-    try:
-        item = request.app.state.users.upsert(
-            str(payload.get("username") or ""),
-            payload.get("password"),
-            str(payload.get("role") or "owner"),
-            [str(shop) for shop in payload.get("shops") or []],
-        )
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    return {"ok": True, "user": {"username": item.username, "role": item.role, "shops": item.shops}}
+@app.get("/api/control/alerts")
+async def alerts(request: Request, status: str = "open") -> dict[str, Any]:
+    return {"alerts": await request.app.state.aggregator.alerts(request.app.state.registry.list(), status)}
 
 
-@app.delete("/api/control/users/{username}")
-async def delete_user(request: Request, username: str, user: ControlUser = Depends(admin_only)) -> dict[str, Any]:
-    try:
-        if not request.app.state.users.delete(username):
-            raise HTTPException(404, "用户不存在")
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    return {"ok": True}
+@app.get("/api/control/daily")
+async def daily(request: Request) -> dict[str, Any]:
+    return await request.app.state.aggregator.daily(request.app.state.registry.list())

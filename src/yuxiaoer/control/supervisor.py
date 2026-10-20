@@ -138,7 +138,6 @@ class ShopSupervisor:
             "id": shop.id,
             "name": shop.name,
             "port": shop.port,
-            "owner": shop.owner,
             "enabled": shop.enabled,
             "auto_start": shop.auto_start,
             "auto_restart": shop.auto_restart,
@@ -152,7 +151,7 @@ class ShopSupervisor:
     async def monitor_loop(self) -> None:
         interval = max(5, int(os.getenv("YUXIAOER_CONTROL_HEALTH_INTERVAL", "10")))
         while not self._stopping:
-            for shop in self.registry.list(is_admin=True):
+            for shop in self.registry.list():
                 if not shop.enabled:
                     continue
                 try:
@@ -198,12 +197,12 @@ class ShopSupervisor:
             await self.restart(shop)
 
     async def start_all(self) -> None:
-        for shop in self.registry.list(is_admin=True):
+        for shop in self.registry.list():
             if shop.enabled and shop.auto_start:
                 await self.start(shop)
 
     async def stop_all(self) -> None:
-        for shop in self.registry.list(is_admin=True):
+        for shop in self.registry.list():
             if self._state.get(shop.id, {}).get("process") is not None:
                 await self.stop(shop, desired=False)
 

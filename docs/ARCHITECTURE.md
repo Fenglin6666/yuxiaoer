@@ -217,29 +217,31 @@ order: new → paid → shipped → delivered → done
 ## 12. 已知限制
 
 1. 默认只监听 `127.0.0.1`；可选 Basic Auth，不是完整账号体系。
-2. 单店仍是单进程、单 SQLite；多店通过“一店一实例 + 控制面”扩展，不做共享进程多租户。
+2. 单账号仍是单进程、单 SQLite；多账号通过“一账号一实例 + 控制台”扩展，不做共享进程多租户。
 3. 买家 → 卖家仍有 4 个窄接口依赖（告警 / 确认 / 消息），已收口到 Protocol。
 4. 真实 WS / 订单 / 发布仍需测试账号现场验证；单测覆盖的是规则与协议帧。
 5. 事件处理器失败只标 failed + 告警，没有自动重试队列（启动时重放）。
 6. 评测集为空时，`/api/eval/run` 返回 0/0。
 
-## 13. 多店控制面
+## 13. 多账号控制台
 
 ```text
-控制面 :8790
-  ├─ registry：data/control/shops.json
-  ├─ users：data/control/users.json（PBKDF2）
-  ├─ supervisor：每店一个 uvicorn 子进程 + 10s 健康检查 + 异常重启
-  ├─ scheduler：按 shop_id 计算抖动，PATCH 各店 patrol 擦亮/日报时间
-  ├─ proxy：代理会话列表/详情/人工回复/接管/店主指令/确认项
-  └─ aggregator：只读拉取各店 /api/status、/api/alerts、/api/overview
+控制台 :8790（本机免登录）
+  ├─ registry：data/control/accounts.json（账号实例：本地名/端口）
+  ├─ supervisor：每个真实闲鱼账号一个 uvicorn 子进程 + 10s 健康检查 + 异常重启
+  ├─ scheduler：按账号计算抖动，PATCH 各账号 patrol 擦亮/日报时间
+  ├─ proxy：代理扫码登录、会话、人工回复、接管、店主指令、确认项
+  └─ aggregator：只读拉取各账号 /api/status、/api/alerts、/api/overview
 ```
 
-统一工作台不合并数据库：控制面按 `shop_id` 代理各店现有 `/api/conversations`、`/api/seller/*`，会话和消息仍归属店铺实例。
+统一工作台不合并数据库：控制台按账号实例代理现有 `/api/conversations`、`/api/seller/*`，会话和消息仍归属对应账号。
 
-- 店铺实例 = 独立 `data/shops/<id>/yuxiaoer.db` + 独立端口 + 独立 active 账号；
-- 控制面按 `users.shops` 过滤可见店铺，owner 不能跨店操作；
-- 控制面只管理自己启动的进程；手工实例需先停，避免端口冲突；
-- 控制面自身不是系统服务，机器重启后需重新拉起。
+- 账号实例 = 独立 `data/shops/<id>/yuxiaoer.db` + 独立端口 + 独立 active 闲鱼账号；
+- 账号身份来自真实扫码登录，不存在“本地注册店铺”；
+- 控制台只管理自己启动的进程；手工实例需先停，避免端口冲突；
+- 没有本地用户/角色/多租户，控制台只监听 `127.0.0.1`；
+- 控制台自身不是系统服务，机器重启后需重新拉起。
+
+
 
 
