@@ -29,6 +29,19 @@ Invoke-WebRequest http://127.0.0.1:8787/api/health
 Invoke-WebRequest http://127.0.0.1:8787/api/status
 ```
 
+## 1.1 多店（一店一实例）
+
+```powershell
+# 默认店（沿用 data/）
+.\run.ps1
+
+# 新店：独立端口 + data/shops/<shop_id>/
+.\run.ps1 -ShopId shop-b -Port 8788
+.\run.ps1 -ShopId shop-c -Port 8789
+```
+
+每个店独立账号、SQLite、写队列、值守任务；不要给多个店设置同一个 `YUXIAOER_DATA_DIR`。详见 `docs/MULTI-SHOP.md`。
+
 ## 2. 首次启动
 
 首次是空库：没有账号、商品、订单、会话，这是预期行为。
@@ -144,7 +157,7 @@ $env:PYTHONPATH = "<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-当前 57 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
+当前 61 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
 
 ## 12. 已知限制
 

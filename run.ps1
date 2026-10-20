@@ -1,4 +1,8 @@
-# 鱼小二 · 一键启动
+# 鱼小二 · 一键启动（单店实例）
+param(
+    [string]$ShopId = "default",
+    [int]$Port = 0
+)
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
@@ -19,12 +23,19 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 }
 
 $env:PYTHONPATH = Join-Path $PSScriptRoot "src"
-if (-not $env:YUXIAOER_PORT) { $env:YUXIAOER_PORT = "8787" }
+$env:YUXIAOER_SHOP_ID = $ShopId
+if ($Port -gt 0) {
+    $env:YUXIAOER_PORT = "$Port"
+} elseif (-not $env:YUXIAOER_PORT) {
+    $env:YUXIAOER_PORT = "8787"
+}
 
+$dataLabel = if ($ShopId -eq "default") { "data/" } else { "data/shops/$ShopId/" }
 Write-Host ""
 Write-Host "  鱼小二 · 托管客服" -ForegroundColor Green
+Write-Host "  店铺: $ShopId" -ForegroundColor Cyan
 Write-Host "  http://127.0.0.1:$env:YUXIAOER_PORT" -ForegroundColor Cyan
-Write-Host "  通道: 原生闲鱼  ·  数据目录 data/" -ForegroundColor DarkGray
+Write-Host "  通道: 原生闲鱼  ·  数据目录 $dataLabel" -ForegroundColor DarkGray
 Write-Host ""
 
 & ".\.venv\Scripts\python.exe" -m uvicorn yuxiaoer.main:app --host 127.0.0.1 --port $env:YUXIAOER_PORT

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import timedelta, timezone
 from pathlib import Path
 
@@ -15,8 +16,31 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(PROJECT_ROOT / ".env")
 
-DATA_DIR = Path(os.getenv("YUXIAOER_DATA_DIR", PROJECT_ROOT / "data"))
-DB_PATH = Path(os.getenv("YUXIAOER_DB", DATA_DIR / "yuxiaoer.db"))
+_DEFAULT_DATA_DIR = PROJECT_ROOT / "data"
+SHOPS_DIR = Path(os.getenv("YUXIAOER_SHOPS_DIR", _DEFAULT_DATA_DIR / "shops"))
+
+
+def normalize_shop_id(value: str | None) -> str:
+    """店铺 ID 只允许字母/数字/下划线/短横线，避免路径穿越。"""
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "-", (value or "").strip())[:40]
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-")
+    return cleaned or "default"
+
+
+def shop_data_dir(shop_id: str) -> Path:
+    if shop_id == "default":
+        return _DEFAULT_DATA_DIR
+    return SHOPS_DIR / shop_id
+
+
+SHOP_ID = normalize_shop_id(os.getenv("YUXIAOER_SHOP_ID", "default"))
+if SHOP_ID == "default":
+    DATA_DIR = Path(os.getenv("YUXIAOER_DATA_DIR", shop_data_dir("default")))
+    DB_PATH = Path(os.getenv("YUXIAOER_DB", DATA_DIR / "yuxiaoer.db"))
+else:
+    # 非默认店不能用全局 DATA_DIR/DB 覆盖，否则所有店会写进同一个库。
+    DATA_DIR = Path(os.getenv("YUXIAOER_SHOP_DATA_DIR", shop_data_dir(SHOP_ID)))
+    DB_PATH = Path(os.getenv("YUXIAOER_SHOP_DB", DATA_DIR / "yuxiaoer.db"))
 
 HOST = os.getenv("YUXIAOER_HOST", "127.0.0.1")
 PORT = int(os.getenv("YUXIAOER_PORT", "8787"))

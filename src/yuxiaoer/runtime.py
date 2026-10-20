@@ -251,6 +251,8 @@ class Runtime:
             "knowledge": await self.knowledge.stats(),
             "jobs": jobs,
             "started_at": self.started_at,
+            "shop_id": config.SHOP_ID,
+            "shop_data_dir": str(config.DATA_DIR),
             "started_human": human_time(self.started_at),
             "local_now": local_now().strftime("%Y-%m-%d %H:%M:%S"),
             "db_path": str(self.db_path),

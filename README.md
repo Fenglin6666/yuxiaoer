@@ -33,6 +33,12 @@ cd <项目目录>
 .\run.ps1
 ```
 
+多店：一店一实例、独立数据目录和端口。
+
+```powershell
+.\run.ps1 -ShopId shop-b -Port 8788
+```
+
 启动后：
 
 | 地址 | 用途 |
@@ -109,7 +115,7 @@ src/yuxiaoer/
   static/        无构建控制台（js/app.js + js/core.js + js/pages/）
   runtime.py     服务装配与生命周期
   main.py        FastAPI 入口
-tests/           57 个单元测试
+tests/           61 个单元测试
 docs/            架构、协议、外部接口
 RUNBOOK.md       运维手册
 ```
@@ -139,7 +145,7 @@ $env:PYTHONPATH="<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-当前 57 个测试，覆盖规则分类、归一化、实体抽取、轻量意图模型、商品索引、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手、入口直投与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
+当前 61 个测试，覆盖规则分类、归一化、实体抽取、轻量意图模型、商品索引、多店数据目录、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手、入口直投与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
 
 ## 8. 外部接口
 
@@ -160,6 +166,7 @@ $env:PYTHONPATH="<项目目录>\src"
 ## 10. 文档
 
 - [架构](docs/ARCHITECTURE.md)
+- [多店](docs/MULTI-SHOP.md)
 - [原生协议](docs/PROTOCOL-XIANYU.md)
 - [外部接口](docs/EXTERNAL-API.md)
 - [运维手册](RUNBOOK.md)
