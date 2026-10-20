@@ -21,6 +21,7 @@ import { pageSettings } from './pages/settings.js';
     $('#pageSubtitle').textContent = subtitle;
     renderNav();
     const view = $('#view');
+    view.className = `view view-${route}`;
     view.innerHTML = `<div class="loading-page"><span class="spinner"></span> 正在加载…</div>`;
     try {
       if (route === 'overview') await pageOverview();

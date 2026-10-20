@@ -24,7 +24,8 @@ class ControlApiTests(unittest.TestCase):
         with TestClient(app) as client:
             response = client.get("/")
             self.assertEqual(response.status_code, 200)
-            self.assertIn("accountPicker", response.text)
+            self.assertIn("manageAccountsTop", response.text)
+            self.assertIn("pearl.css", response.text)
 
             response = client.get("/api/hub/accounts")
             self.assertEqual(response.status_code, 200)

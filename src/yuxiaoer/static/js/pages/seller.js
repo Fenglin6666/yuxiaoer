@@ -1,16 +1,19 @@
 /* 鱼小二控制台 · 让小二做点什么（原生 ESM，无构建） */
 
-import { $, $$, S, api, avatar, chip, closeModal, emptyBlock, esc, every, fmtTime, icon, money, navigate, nl2br, openModal, orderStatus, refreshGlobal, toast } from '../core.js';
+import { $, $$, S, api, avatar, chip, clearTimers, closeModal, emptyBlock, esc, every, fmtTime, icon, money, navigate, nl2br, openModal, orderStatus, refreshGlobal, toast } from '../core.js';
+import { accountTabsHTML, bindAccountTabs } from '../hub.js';
 
   // =========================================================
   // Seller agent chat
   // =========================================================
 export async function pageSeller() {
+    clearTimers();
     $('#view').innerHTML = `
       <div class="page-head">
         <div><h2>让小二做点什么</h2><p>把图片和描述发给小二，它自动补标题、价格、分类、所在地；确认卡可编辑，改完再上架。</p></div>
         <div class="btn-row"><button class="btn soft" id="sellerOrders">${icon('orders')} 订单履约</button><button class="btn" id="sellerRefresh">${icon('refresh')} 刷新</button></div>
       </div>
+      <div class="page-accounts" id="sellerAccounts"></div>
       <div class="seller-wrap">
         <div class="seller-chat">
           <div class="seller-head">
@@ -45,6 +48,11 @@ export async function pageSeller() {
     };
     $('#sellerInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendSeller(); } });
     $$('.seller-quick [data-send]').forEach((b) => { b.onclick = () => sendSeller(b.dataset.send); });
+    $('#sellerAccounts').innerHTML = accountTabsHTML();
+    bindAccountTabs($('#sellerAccounts'), async () => {
+      await pageSeller();
+      await refreshGlobal();
+    });
     await loadSeller(true);
     every(() => { if (!document.hidden && !S.seller.busy) loadSeller(false).catch(() => {}); }, 6000);
   }

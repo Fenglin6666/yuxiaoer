@@ -1,6 +1,7 @@
 /* 鱼小二控制台 · 客服工作台（原生 ESM，无构建） */
 
-import { $, $$, ACTION_LABEL, CATEGORY_LABEL, ITEM_STATUS, S, api, avatar, avatarClass, chip, emptyBlock, esc, every, icon, money, navigate, nl2br, orderStatus, refreshGlobal, toast } from '../core.js';
+import { $, $$, ACTION_LABEL, CATEGORY_LABEL, ITEM_STATUS, S, api, avatar, avatarClass, chip, clearTimers, emptyBlock, esc, every, icon, money, navigate, nl2br, orderStatus, refreshGlobal, toast } from '../core.js';
+import { accountTabsHTML, bindAccountTabs } from '../hub.js';
 
   // =========================================================
   // Buyer experience
@@ -9,11 +10,13 @@ import { $, $$, ACTION_LABEL, CATEGORY_LABEL, ITEM_STATUS, S, api, avatar, avata
   // Inbox
   // =========================================================
 export async function pageInbox() {
+    clearTimers();
     $('#view').innerHTML = `
       <div class="page-head">
         <div><h2>所有会话都在这里</h2><p>中间对话，右侧是 Agent 的上下文与轨迹；你可以随时接管。</p></div>
         <div class="btn-row"><button class="btn" id="inboxRefresh">${icon('refresh')} 刷新</button></div>
       </div>
+      <div class="page-accounts" id="inboxAccounts"></div>
       <div class="inbox-shell">
         <aside class="conv-pane">
           <div class="conv-pane-head">
@@ -43,6 +46,12 @@ export async function pageInbox() {
     $('#convSearch').oninput = (e) => { S.inbox.search = e.target.value.trim(); renderConvList(); };
     $('#manualSend').onclick = sendManualReply;
     $('#manualInput').addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); sendManualReply(); } });
+    $('#inboxAccounts').innerHTML = accountTabsHTML();
+    bindAccountTabs($('#inboxAccounts'), async () => {
+      S.inbox.id = null;
+      await pageInbox();
+      await refreshGlobal();
+    });
     await loadInbox(true);
     every(() => { if (!document.hidden && !S.inbox.busy) loadInbox(false).catch(() => {}); }, 6000);
   }

@@ -1,4 +1,4 @@
-/* 多账号切换器：嵌在现有控制台侧边栏，不单独做页面。 */
+/* 多账号切换器：嵌在客服工作台 / 让小二做点什么页面顶部，不单独做页面。 */
 
 import { $, S, closeModal, esc, openModal, toast } from './core.js';
 
@@ -14,10 +14,10 @@ async function hubFetch(path, options = {}) {
   return data;
 }
 
-function accountLabel(item) {
+export function accountLabel(item) {
   const account = item.account || {};
   const who = account.nickname || account.platform_user_id || '未登录';
-  const state = item.running ? (item.health && item.health.online ? '运行中' : '启动中') : '已停止';
+  const state = item.running ? (item.health && item.health.online ? '在线' : '启动中') : '已停止';
   return `${item.name} · ${who} · ${state}`;
 }
 
@@ -27,23 +27,48 @@ async function loadAccounts() {
 }
 
 function selectAccount(accounts) {
-  const picker = $('#accountPicker');
-  picker.innerHTML = accounts.map((item) => (
-    `<option value="${esc(item.id)}">${esc(accountLabel(item))}</option>`
-  )).join('');
-  if (!accounts.length) {
-    picker.innerHTML = '<option value="">还没有闲鱼账号</option>';
-    return;
-  }
+  S.hubAccounts = accounts;
+  if (!accounts.length) return;
   const exists = accounts.some((item) => item.id === S.accountId);
   if (!exists) {
     const preferred = accounts.find((item) => item.running && item.health && item.health.online) || accounts[0];
     S.accountId = preferred.id;
     localStorage.setItem('yuxiaoer_account', S.accountId);
   }
-  picker.value = S.accountId;
   const selected = accounts.find((item) => item.id === S.accountId);
   if (selected) $('#shopName').textContent = selected.name;
+}
+
+export function accountTabsHTML() {
+  const accounts = S.hubAccounts || [];
+  if (!accounts.length) {
+    return '<div class="account-tabs"><span class="muted">还没有闲鱼账号</span><button class="account-tab add" data-account-manage>+ 添加账号</button></div>';
+  }
+  const tabs = accounts.map((item) => {
+    const active = item.id === S.accountId;
+    const account = item.account || {};
+    const online = item.running && item.health && item.health.online;
+    const who = account.nickname || account.platform_user_id || '未登录';
+    return `<button class="account-tab ${active ? 'active' : ''}" data-account-id="${esc(item.id)}">
+      <b>${esc(item.name)}</b><span>${esc(who)} · ${online ? '在线' : item.running ? '启动中' : '已停止'}</span>
+    </button>`;
+  }).join('');
+  return `<div class="account-tabs">${tabs}<button class="account-tab add" data-account-manage>+ 账号</button></div>`;
+}
+
+export function bindAccountTabs(root, reload) {
+  if (!root) return;
+  root.querySelectorAll('[data-account-id]').forEach((button) => {
+    button.onclick = async () => {
+      const id = button.dataset.accountId;
+      if (id === S.accountId) return;
+      S.accountId = id;
+      localStorage.setItem('yuxiaoer_account', id);
+      await reload();
+    };
+  });
+  const manage = root.querySelector('[data-account-manage]');
+  if (manage) manage.onclick = () => openManager().catch((err) => toast(err.message, 'error'));
 }
 
 async function openManager() {
@@ -156,9 +181,4 @@ export async function initHub() {
     return;
   }
   selectAccount(accounts);
-  $('#accountPicker').onchange = (event) => {
-    S.accountId = event.target.value;
-    localStorage.setItem('yuxiaoer_account', S.accountId);
-    location.reload();
-  };
 }

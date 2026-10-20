@@ -102,23 +102,6 @@ body {
 .dot.offline { background: var(--danger); box-shadow: 0 0 0 3px rgba(224, 68, 59, 0.12); }
 .dot.amber { background: var(--amber); box-shadow: 0 0 0 3px rgba(168, 107, 22, 0.12); }
 
-.account-bar {
-  display: flex; align-items: center; gap: 6px;
-  margin: 0 2px 12px; padding: 7px 8px;
-  border: 1px solid rgba(27, 36, 48, 0.08);
-  border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.55);
-}
-.account-bar .account-label { font-size: 9.5px; color: var(--muted); white-space: nowrap; letter-spacing: 0.04em; }
-.account-bar select {
-  flex: 1; min-width: 0; height: 28px;
-  background: #fff; color: var(--ink-2);
-  border: 1px solid var(--line-strong); border-radius: 7px;
-  padding: 0 6px; font-size: 10.5px; outline: none;
-}
-.account-bar select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(35, 109, 233, 0.10); }
-.account-bar .icon-btn { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 7px; }
-
 .nav { gap: 2px; margin-top: 6px; }
 .nav-group {
   margin: 14px 9px 5px; color: var(--muted-2);
@@ -299,6 +282,39 @@ textarea.input { height: auto; padding: 9px 10px; resize: vertical; }
 .hero-mini strong { color: var(--ink); font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .ring { --ring-color: var(--brand); background: conic-gradient(var(--ring-color) calc(var(--pct) * 1%), rgba(27, 36, 48, 0.08) 0); }
 
+/* ---------------- 账号标签页 ---------------- */
+.page-accounts { margin: -4px 0 12px; min-height: 34px; }
+.account-tabs { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.account-tabs::-webkit-scrollbar { display: none; }
+.account-tab {
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start;
+  gap: 1px; padding: 6px 11px; border-radius: 9px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.62);
+  color: var(--muted); text-align: left; line-height: 1.15;
+}
+.account-tab b { font-size: 11.5px; font-weight: 620; color: var(--ink-2); }
+.account-tab span { font-size: 9px; color: var(--muted-2); }
+.account-tab:hover { border-color: rgba(35, 109, 233, 0.22); background: #fff; }
+.account-tab.active { background: var(--brand-soft); border-color: rgba(35, 109, 233, 0.20); color: var(--brand); }
+.account-tab.active b { color: var(--brand); }
+.account-tab.add { justify-content: center; min-width: 58px; height: 34px; font-size: 11px; color: var(--brand); border-style: dashed; }
+
+/* ---------------- 一屏工作区 ---------------- */
+.view-inbox, .view-seller {
+  height: calc(100vh - var(--topbar-h));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+.view-inbox .page-head, .view-seller .page-head { flex: 0 0 auto; margin-bottom: 10px; }
+.view-inbox .page-accounts, .view-seller .page-accounts { flex: 0 0 auto; }
+.view-inbox .inbox-shell { flex: 1; height: auto; min-height: 0; }
+.view-seller .seller-wrap { flex: 1; height: auto; min-height: 0; }
+.view-seller .seller-chat { min-height: 0; }
+.view-seller .seller-side { min-height: 0; overflow-y: auto; }
+
 /* ---------------- 表格 ---------------- */
 .table-wrap { border-radius: var(--r-md); }
 .table { font-size: 11.5px; }
@@ -340,6 +356,7 @@ textarea.input { height: auto; padding: 9px 10px; resize: vertical; }
   .view { padding: 18px 16px 48px; }
 }
 @media (max-width: 720px) {
+  .view-inbox, .view-seller { height: auto; overflow: visible; }
   .sidebar {
     position: fixed; left: 0; right: 0; bottom: 0; top: auto;
     width: 100%; height: 64px; flex-basis: auto; flex-direction: row;
@@ -350,7 +367,6 @@ textarea.input { height: auto; padding: 9px 10px; resize: vertical; }
     backdrop-filter: blur(22px) saturate(130%);
     z-index: 50;
   }
-  .account-bar { display: none; }
   .nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; margin: 0; gap: 4px; padding: 0; }
   .nav-item { color: var(--muted); }
   .nav-item.active { background: var(--brand-soft); color: var(--brand); }
