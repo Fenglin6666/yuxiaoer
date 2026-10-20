@@ -46,17 +46,23 @@ def parse_offer(text: str, price_cents: int) -> int | None:
     m = re.search(r"¥\s*" + _NUM, t)
     if m:
         return int(round(float(m.group(1)) * 100))
-    # 纯数字短句（如 "7.5 行不行"）
-    m = re.search(_NUM, t)
+    # 纯数字短句（如 "7.5 行不行"）；尺码/内长数字不算出价
+    m = re.search(r"(?<![\d.])" + _NUM + r"(?![\d.]|\s*(?:码|mm|码数))", t)
     if m:
         return int(round(float(m.group(1)) * 100))
     return None
 
 
-def decide(item: dict, text: str, round_no: int = 0, max_rounds: int = 3) -> BargainDecision:
+def decide(
+    item: dict,
+    text: str,
+    round_no: int = 0,
+    max_rounds: int = 3,
+    offer_cents: int | None = None,
+) -> BargainDecision:
     price = int(item["price_cents"])
     floor = int(item["floor_price_cents"])
-    offer = parse_offer(text, price)
+    offer = offer_cents if offer_cents is not None else parse_offer(text, price)
     delivery = item.get("delivery_mode") or "physical"
     is_bundle = bool(re.search(r"(两件|两个|2件|2个|一起买|打包)", text or ""))
     max_rounds = max(1, int(max_rounds or 3))

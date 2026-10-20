@@ -15,7 +15,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from yuxiaoer.buyer.conversation.bargain import decide as bargain_decide
+from yuxiaoer.buyer.conversation.context import TurnContext
 from yuxiaoer.buyer.conversation.gateway import Decision, classify
+from yuxiaoer.buyer.conversation.slots import extract_slots
 from yuxiaoer.buyer.conversation.small_model import ACTION as SMALL_ACTION, small_model
 from yuxiaoer.core import config
 from yuxiaoer.core.db import Database
@@ -137,10 +139,16 @@ class BuyerAgent:
             if decision.category == "unknown" and self.llm.available():
                 decision = await self._llm_classify(text, decision)
 
+        ctx = TurnContext(
+            conv=conv, buyer=buyer, item=item, text=text,
+            decision=decision, toolbox=toolbox,
+            slots=extract_slots(text, item),
+        )
+
         try:
             already_sent = False
             if decision.action == "silent":
-                result = await self._handle_silent(conv, buyer, item, text, decision)
+                result = await self._handle_silent(ctx)
             elif decision.action == "template":
                 reply = decision.template or "在的，有需要随时问我～"
                 sent = await self.messaging.send_reply(conv, reply, turn_id=turn_id,
@@ -151,17 +159,17 @@ class BuyerAgent:
                     steps=0, notes=[sent.get("reason")] if sent.get("reason") else [],
                 )
             elif decision.cautious or decision.category == "unknown":
-                result = await self._handle_cautious(conv, buyer, item, text, decision, toolbox)
+                result = await self._handle_cautious(ctx)
             elif decision.category == "human":
-                result = await self._handle_human_request(conv, buyer, item, text, decision, toolbox)
+                result = await self._handle_human_request(ctx)
             elif decision.category == "after_sale":
-                result = await self._after_sale(conv, buyer, item, text, decision, toolbox)
+                result = await self._after_sale(ctx)
             elif decision.category == "bargain":
-                result = await self._bargain(conv, buyer, item, text, decision, toolbox)
+                result = await self._bargain(ctx)
             elif decision.category == "order":
-                result = await self._order(conv, buyer, item, text, decision, toolbox)
+                result = await self._order(ctx)
             else:
-                result = await self._pre_sale(conv, buyer, item, text, decision, toolbox)
+                result = await self._pre_sale(ctx)
 
             if toolbox.repeat and not result.handoff:
                 await self._escalate(conv, buyer, item, text, "同一工具重复调用，熔断转人工")
@@ -222,18 +230,24 @@ class BuyerAgent:
 
     # ---------------- 分支 ----------------
 
-    async def _pre_sale(
-        self, conv: dict, buyer: dict, item: dict | None, text: str, decision: Decision, tools: ToolBox
-    ) -> BuyerReply:
+    async def _pre_sale(self, ctx: TurnContext) -> BuyerReply:
+        conv, buyer, item, text, tools = (
+            ctx.conv, ctx.buyer, ctx.item, ctx.text, ctx.toolbox
+        )
         shop_intent = bool(re.search(
             r"(店里|推荐|别的款|其他款|别的鞋|其他鞋|还有别的|有没有别的|适合.*(?:跑|穿|用)|预算)", text
         ))
         if not item or shop_intent:
+            keywords = ctx.slots.get("keywords") or []
+            query = " ".join(keywords) if keywords else text
             result = await tools.call(
-                "search_items", {"query": text, "limit": 5},
-                lambda: self._search_items(text, 5),
+                "search_items", {"query": query, "limit": 5},
+                lambda: self._search_items(query, 5),
             )
             hits = (result.get("data") or []) if result.get("ok") else []
+            budget = ctx.slots.get("budget_cents")
+            if budget:
+                hits = [hit for hit in hits if int(hit.get("price_cents") or 0) <= budget]
             if hits:
                 return BuyerReply(
                     text=self._candidate_text(hits), steps=tools.steps,
@@ -265,15 +279,16 @@ class BuyerAgent:
                 reply = self._fallback_pre_sale(item)
         return BuyerReply(text=reply, steps=tools.steps, notes=[f"FAQ命中{len(faq_hits)}条"])
 
-    async def _bargain(
-        self, conv: dict, buyer: dict, item: dict | None, text: str, decision: Decision, tools: ToolBox
-    ) -> BuyerReply:
+    async def _bargain(self, ctx: TurnContext) -> BuyerReply:
+        conv, buyer, item, text, tools = (
+            ctx.conv, ctx.buyer, ctx.item, ctx.text, ctx.toolbox
+        )
         if not item:
             return BuyerReply(text="这件商品我确认下再回你～", handoff=True, handoff_reason="商品缺失")
         await tools.call("get_item_info", {"item_id": item["id"]}, lambda: self._get_item_info(item["id"]))
         round_no = int(conv.get("bargain_round") or 0)
         max_rounds = await self.settings.get_int("bargain_max_rounds", 3)
-        result = bargain_decide(item, text, round_no, max_rounds)
+        result = bargain_decide(item, text, round_no, max_rounds, offer_cents=ctx.slots.get("offer_cents"))
         await self.db.execute(
             "UPDATE conversations SET bargain_round=bargain_round+1,updated_at=? WHERE id=?",
             (iso(), conv["id"]),
@@ -296,12 +311,15 @@ class BuyerAgent:
             reply = result.message
         return BuyerReply(text=reply, steps=tools.steps, notes=notes)
 
-    async def _after_sale(
-        self, conv: dict, buyer: dict, item: dict | None, text: str, decision: Decision, tools: ToolBox
-    ) -> BuyerReply:
+    async def _after_sale(self, ctx: TurnContext) -> BuyerReply:
+        conv, buyer, item, text, tools = (
+            ctx.conv, ctx.buyer, ctx.item, ctx.text, ctx.toolbox
+        )
         order_res = await tools.call(
             "get_order_status", {"buyer_id": conv["buyer_id"], "item_id": conv.get("item_id")},
-            lambda: self._get_order_status(conv["buyer_id"], conv.get("item_id")),
+            lambda: self._get_order_status(
+                conv["buyer_id"], conv.get("item_id"), ctx.slots.get("order_no")
+            ),
         )
         order = (order_res.get("data") or {}).get("order") if order_res.get("ok") else None
         low = text.lower()
@@ -404,12 +422,13 @@ class BuyerAgent:
             steps=tools.steps,
         )
 
-    async def _order(
-        self, conv: dict, buyer: dict, item: dict | None, text: str, decision: Decision, tools: ToolBox
-    ) -> BuyerReply:
+    async def _order(self, ctx: TurnContext) -> BuyerReply:
+        conv, tools = ctx.conv, ctx.toolbox
         order_res = await tools.call(
             "get_order_status", {"buyer_id": conv["buyer_id"], "item_id": conv.get("item_id")},
-            lambda: self._get_order_status(conv["buyer_id"], conv.get("item_id")),
+            lambda: self._get_order_status(
+                conv["buyer_id"], conv.get("item_id"), ctx.slots.get("order_no")
+            ),
         )
         order = (order_res.get("data") or {}).get("order") if order_res.get("ok") else None
         if not order:
@@ -433,9 +452,8 @@ class BuyerAgent:
             steps=tools.steps,
         )
 
-    async def _handle_cautious(
-        self, conv: dict, buyer: dict, item: dict | None, text: str, decision: Decision, tools: ToolBox
-    ) -> BuyerReply:
+    async def _handle_cautious(self, ctx: TurnContext) -> BuyerReply:
+        conv, buyer, text, tools = ctx.conv, ctx.buyer, ctx.text, ctx.toolbox
         hits_res = await tools.call(
             "kb_search", {"query": text, "namespace": "buyer", "k": 3},
             lambda: self.knowledge.search(text, namespace="buyer", k=3, types=["faq"]),
@@ -455,18 +473,18 @@ class BuyerAgent:
             handoff=False, handoff_reason="低置信问题", steps=tools.steps,
         )
 
-    async def _handle_human_request(
-        self, conv: dict, buyer: dict, item: dict | None, text: str, decision: Decision, tools: ToolBox
-    ) -> BuyerReply:
+    async def _handle_human_request(self, ctx: TurnContext) -> BuyerReply:
+        conv, buyer, item, text, tools = (
+            ctx.conv, ctx.buyer, ctx.item, ctx.text, ctx.toolbox
+        )
         await self._escalate(conv, buyer, item, text, "买家主动要求人工")
         return BuyerReply(
             text="好的～ 我请店主来跟你聊，稍等一下。",
             handoff=True, handoff_reason="买家要求人工", steps=tools.steps,
         )
 
-    async def _handle_silent(
-        self, conv: dict, buyer: dict, item: dict | None, text: str, decision: Decision
-    ) -> BuyerReply:
+    async def _handle_silent(self, ctx: TurnContext) -> BuyerReply:
+        conv, buyer, text, decision = ctx.conv, ctx.buyer, ctx.text, ctx.decision
         kind = "risk_message" if decision.category == "risk" else "off_platform_attempt"
         title = "风险消息拦截" if decision.category == "risk" else "站外沟通拦截"
         await self.alerts.create(
@@ -515,8 +533,16 @@ class BuyerAgent:
             "description": snippet(item["description"], 300),
         }
 
-    async def _get_order_status(self, buyer_id: str, item_id: str | None) -> dict[str, Any]:
-        if item_id:
+    async def _get_order_status(
+        self, buyer_id: str, item_id: str | None, order_no: str | None = None
+    ) -> dict[str, Any]:
+        if order_no:
+            row = await self.db.fetchone(
+                "SELECT * FROM orders WHERE id=? OR platform_order_id=? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (order_no, order_no),
+            )
+        elif item_id:
             row = await self.db.fetchone(
                 "SELECT * FROM orders WHERE buyer_id=? AND item_id=? ORDER BY created_at DESC LIMIT 1",
                 (buyer_id, item_id),

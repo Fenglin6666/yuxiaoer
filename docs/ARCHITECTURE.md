@@ -66,6 +66,8 @@ main.py
 | `shared/ports.py` | 买家域依赖的告警 / 消息窄接口 |
 | `buyer/conversation/gateway.py` | 9 类规则分类，可解释、无 LLM 依赖 |
 | `buyer/conversation/normalize.py` | NFKC / 匹配 / 站外拆字 / 价格归一化 |
+| `buyer/conversation/slots.py` | 尺码/颜色/预算/订单号/出价抽取 |
+| `buyer/conversation/context.py` | `TurnContext`：意图、实体、商品、工具统一传递 |
 | `buyer/conversation/small_model.py` | 字符 n-gram 最近邻意图模型（规则 unknown 时兜底） |
 | `buyer/conversation/bargain.py` | 议价：解析报价、守底价、反报价 |
 | `buyer/conversation/agent.py` | 买家 Agent：分支处理、工具白名单、转人工 |
