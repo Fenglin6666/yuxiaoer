@@ -226,9 +226,9 @@ order: new → paid → shipped → delivered → done
 ## 13. 多账号控制台
 
 ```text
-控制台 :8790（本机免登录）
+控制台 :8787（唯一入口，本机免登录）
   ├─ registry：data/control/accounts.json（账号实例：本地名/端口）
-  ├─ supervisor：每个真实闲鱼账号一个 uvicorn 子进程 + 10s 健康检查 + 异常重启
+  ├─ supervisor：每个真实闲鱼账号一个 uvicorn 子进程（8801+）+ 10s 健康检查 + 异常重启
   ├─ scheduler：按账号计算抖动，PATCH 各账号 patrol 擦亮/日报时间
   ├─ proxy：代理扫码登录、会话、人工回复、接管、店主指令、确认项
   └─ aggregator：只读拉取各账号 /api/status、/api/alerts、/api/overview

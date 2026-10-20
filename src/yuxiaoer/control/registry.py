@@ -14,7 +14,7 @@ DEFAULT_SHOPS: list[dict[str, Any]] = [
     {
         "id": "default",
         "name": "闲鱼账号",
-        "port": 8787,
+        "port": 8801,
         "enabled": True,
         "auto_start": True,
         "auto_restart": True,
@@ -24,6 +24,9 @@ DEFAULT_SHOPS: list[dict[str, Any]] = [
         "note": "",
     }
 ]
+
+HUB_PORT = 8787
+WORKER_PORT_START = 8801
 
 
 @dataclass
@@ -71,6 +74,22 @@ class ShopRegistry:
                 self._shops[shop.id] = shop
             except (TypeError, ValueError):
                 continue
+        if self._repair_ports():
+            self.save()
+
+    def _repair_ports(self) -> bool:
+        """8787 是控制台，账号实例不能占用；重复端口自动顺延。"""
+        changed = False
+        used: set[int] = set()
+        for shop in sorted(self._shops.values(), key=lambda item: item.id):
+            if shop.port == HUB_PORT or shop.port in used:
+                port = WORKER_PORT_START
+                while port in used:
+                    port += 1
+                shop.port = port
+                changed = True
+            used.add(shop.port)
+        return changed
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -89,7 +108,7 @@ class ShopRegistry:
 
     def next_port(self) -> int:
         used = {shop.port for shop in self._shops.values()}
-        port = 8787
+        port = WORKER_PORT_START
         while port in used:
             port += 1
         return port

@@ -5,10 +5,10 @@
 ## 1. 形态
 
 ```text
-控制台 :8790
-  ├─ 账号 A（闲鱼账号 1）→ data/              → 8787
-  ├─ 账号 B（闲鱼账号 2）→ data/shops/acct_2/ → 8788
-  └─ 账号 C（闲鱼账号 3）→ data/shops/acct_3/ → 8789
+控制台 :8787（唯一入口）
+  ├─ 账号 A（闲鱼账号 1）→ data/              → 8801（内部）
+  ├─ 账号 B（闲鱼账号 2）→ data/shops/acct_2/ → 8802（内部）
+  └─ 账号 C（闲鱼账号 3）→ data/shops/acct_3/ → 8803（内部）
 ```
 
 - 每个账号独立 SQLite、Cookie/Token、WebSocket、值守 Agent；
@@ -19,8 +19,10 @@
 ## 2. 启动
 
 ```powershell
-.\run-control.ps1 -Port 8790
+.\run.ps1
 ```
+
+只需这一个入口，不再有单独的 `run-control.ps1`。
 
 ## 3. 添加真实闲鱼账号
 

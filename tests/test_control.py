@@ -21,7 +21,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_add_account_auto_port(self) -> None:
         shop = self.registry.upsert({"name": "主号"})
-        self.assertEqual(shop.port, 8788)
+        self.assertEqual(shop.port, 8802)
         self.assertNotEqual(shop.id, "default")
         self.assertEqual(self.registry.get(shop.id).name, "主号")
 
