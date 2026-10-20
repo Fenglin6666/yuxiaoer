@@ -367,7 +367,7 @@ async function confirmAction(id, action) {
 (async () => {
   try {
     const me = await api('/api/control/me');
-    $('who').textContent = `${me.username} · ${me.role}`;
+    $('who').textContent = me.username === 'local' ? '本机 · 免登录' : `${me.username} · ${me.role}`;
     window.__isAdmin = me.role === 'admin';
     if (window.__isAdmin) { $('users-section').classList.remove('hide'); await loadUsers(); }
   } catch (_) {}

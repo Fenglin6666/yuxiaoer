@@ -15,7 +15,7 @@ if (-not $env:YUXIAOER_CONTROL_PORT) { $env:YUXIAOER_CONTROL_PORT = "8790" }
 Write-Host ""
 Write-Host "  鱼小二 · 多店控制面" -ForegroundColor Green
 Write-Host "  http://127.0.0.1:$env:YUXIAOER_CONTROL_PORT" -ForegroundColor Cyan
-Write-Host "  默认账号 admin；密码由 YUXIAOER_CONTROL_PASSWORD 设置（未设置时为 admin）" -ForegroundColor DarkGray
+Write-Host "  本机免登录；仅监听 127.0.0.1" -ForegroundColor DarkGray
 Write-Host ""
 
 & ".\.venv\Scripts\python.exe" -m uvicorn yuxiaoer.control.main:app --host 127.0.0.1 --port $env:YUXIAOER_CONTROL_PORT

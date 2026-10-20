@@ -23,6 +23,8 @@ STATIC = Path(__file__).parent / "static" / "control.html"
 
 
 def current_user(request: Request, credentials: HTTPBasicCredentials | None = Depends(security)) -> ControlUser:
+    if os.getenv("YUXIAOER_CONTROL_AUTH", "0") not in ("1", "true", "on"):
+        return ControlUser("local", "", "admin", ["*"])
     if credentials is None:
         raise HTTPException(401, "需要登录", headers={"WWW-Authenticate": "Basic"})
     user = request.app.state.users.authenticate(credentials.username, credentials.password)

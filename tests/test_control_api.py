@@ -17,6 +17,7 @@ class ControlApiTests(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="yx-control-api-"))
         os.environ["YUXIAOER_CONTROL_DIR"] = str(self.tmp)
         os.environ["YUXIAOER_CONTROL_PASSWORD"] = "admin"
+        os.environ["YUXIAOER_CONTROL_AUTH"] = "1"
         os.environ["YUXIAOER_CONTROL_AUTOSTART"] = "0"
 
     def test_admin_and_owner_isolation(self) -> None:
@@ -93,6 +94,24 @@ class ControlApiTests(unittest.TestCase):
                 auth=admin, json={"text": "在的"},
             )
             self.assertEqual(response.status_code, 200)
+
+
+class ControlOpenAccessTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="yx-control-open-"))
+        os.environ["YUXIAOER_CONTROL_DIR"] = str(self.tmp)
+        os.environ["YUXIAOER_CONTROL_AUTH"] = "0"
+        os.environ["YUXIAOER_CONTROL_AUTOSTART"] = "0"
+
+    def test_direct_access_without_password(self) -> None:
+        with TestClient(app) as client:
+            response = client.get("/")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("多店控制台", response.text)
+            me = client.get("/api/control/me")
+            self.assertEqual(me.status_code, 200)
+            self.assertEqual(me.json()["username"], "local")
+            self.assertEqual(client.get("/api/control/shops").status_code, 200)
 
 
 if __name__ == "__main__":

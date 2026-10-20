@@ -76,9 +76,12 @@ data/shops/shop-b/yuxiaoer.db       shop-b
 .\run-control.ps1 -Port 8790
 ```
 
-默认地址 `http://127.0.0.1:8790`，默认账号 `admin`。首次启动前设置密码：
+默认地址 `http://127.0.0.1:8790`，本机打开即用，**默认不需要登录**。
+
+控制面只监听 `127.0.0.1`；如果确实要暴露到局域网/公网，再开启可选鉴权：
 
 ```dotenv
+YUXIAOER_CONTROL_AUTH=1
 YUXIAOER_CONTROL_PASSWORD=change-me
 ```
 
@@ -88,7 +91,7 @@ YUXIAOER_CONTROL_PASSWORD=change-me
 - **进程守护**：启动/停止/重启，每 10 秒健康检查，异常连续 3 次或进程退出时自动重启；
 - **统一排期**：按 `shop_id` 计算确定性抖动，把擦亮/日报时间写回各店 patrol，避免同一时间集中请求平台；每日按抖动时间触发一次商品同步；
 - **跨店汇总**：在线状态、未处理告警、当天指标（只读，不改店铺数据）；
-- **按店权限**：`data/control/users.json` 保存 PBKDF2 密码哈希；admin 看全部，owner 只看分配店铺。
+- **按店权限**：默认本机免登录（等同 admin）；开启 `YUXIAOER_CONTROL_AUTH=1` 后使用 `data/control/users.json` 的 PBKDF2 账号，admin 看全部，owner 只看分配店铺。
 
 ### 统一工作台
 
@@ -102,10 +105,10 @@ YUXIAOER_CONTROL_PASSWORD=change-me
 
 控制面只做代理，不复制会话数据；所有读写仍落在对应店铺的 SQLite。
 
-控制台账号可用管理员 API 创建：
+控制台账号仅在开启鉴权时使用，可用管理员 API 创建：
 
 ```powershell
-# 使用 admin 登录后
+# 仅在 CONTROL_AUTH=1 时，用 admin 登录后
 POST /api/control/users
 {"username":"alice","password":"...","role":"owner","shops":["shop-b"]}
 ```
