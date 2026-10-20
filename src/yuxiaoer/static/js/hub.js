@@ -1,6 +1,6 @@
 /* 多账号切换器：嵌在客服工作台 / 让小二做点什么页面顶部，不单独做页面。 */
 
-import { $, S, closeModal, esc, openModal, toast } from './core.js';
+import { $, S, closeModal, esc, openModal, toast } from './core.js?v=20261021-2';
 
 async function hubFetch(path, options = {}) {
   const opts = { method: options.method || 'GET', headers: {} };

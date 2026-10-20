@@ -26,6 +26,7 @@ class ControlApiTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn("manageAccountsTop", response.text)
             self.assertIn("pearl.css", response.text)
+            self.assertIn("no-store", response.headers.get("cache-control", ""))
 
             response = client.get("/api/hub/accounts")
             self.assertEqual(response.status_code, 200)

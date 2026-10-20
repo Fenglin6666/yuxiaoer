@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 设置（原生 ESM，无构建） */
 
-import { $, $$, S, api, chip, esc, fmtTime, icon, navigate, pad, refreshGlobal, toast } from '../core.js';
+import { $, $$, S, api, chip, esc, fmtTime, icon, navigate, pad, refreshGlobal, toast } from '../core.js?v=20261021-2';
 
 export async function pageSettings() {
     const [data, items] = await Promise.all([api('/settings'), api('/items')]);

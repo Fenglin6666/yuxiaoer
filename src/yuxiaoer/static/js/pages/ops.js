@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 观测/回放/评测（原生 ESM，无构建） */
 
-import { $, $$, CATEGORY_LABEL, S, api, chip, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, nl2br, pad, toast } from '../core.js';
+import { $, $$, CATEGORY_LABEL, S, api, chip, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, nl2br, pad, toast } from '../core.js?v=20261021-2';
 
   // =========================================================
   // Ops / replay / eval

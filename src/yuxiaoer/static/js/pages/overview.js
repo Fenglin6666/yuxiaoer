@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 总览（原生 ESM，无构建） */
 
-import { $, $$, S, api, avatar, avatarClass, chip, clampPct, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, navigate, openAlertCenter, orderStatus, pad, refreshGlobal, toast } from '../core.js';
+import { $, $$, S, api, avatar, avatarClass, chip, clampPct, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, navigate, openAlertCenter, orderStatus, pad, refreshGlobal, toast } from '../core.js?v=20261021-2';
 
   // =========================================================
   // Overview

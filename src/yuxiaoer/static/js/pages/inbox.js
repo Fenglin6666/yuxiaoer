@@ -1,7 +1,7 @@
 /* 鱼小二控制台 · 客服工作台（原生 ESM，无构建） */
 
-import { $, $$, ACTION_LABEL, CATEGORY_LABEL, ITEM_STATUS, S, api, avatar, avatarClass, chip, clearTimers, emptyBlock, esc, every, icon, money, navigate, nl2br, orderStatus, refreshGlobal, toast } from '../core.js';
-import { accountTabsHTML, bindAccountTabs } from '../hub.js';
+import { $, $$, ACTION_LABEL, CATEGORY_LABEL, ITEM_STATUS, S, api, avatar, avatarClass, chip, clearTimers, emptyBlock, esc, every, icon, money, navigate, nl2br, orderStatus, refreshGlobal, toast } from '../core.js?v=20261021-2';
+import { accountTabsHTML, bindAccountTabs } from '../hub.js?v=20261021-2';
 
   // =========================================================
   // Buyer experience

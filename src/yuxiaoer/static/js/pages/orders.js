@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 订单履约（原生 ESM，无构建） */
 
-import { $, $$, S, api, closeModal, confirmAction, emptyBlock, esc, every, fmtTime, icon, money, openModal, orderStatus, pad, refreshGlobal, toast } from '../core.js';
+import { $, $$, S, api, closeModal, confirmAction, emptyBlock, esc, every, fmtTime, icon, money, openModal, orderStatus, pad, refreshGlobal, toast } from '../core.js?v=20261021-2';
 
   // =========================================================
   // Orders

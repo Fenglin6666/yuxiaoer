@@ -1,7 +1,7 @@
 /* 鱼小二控制台 · 让小二做点什么（原生 ESM，无构建） */
 
-import { $, $$, S, api, avatar, chip, clearTimers, closeModal, emptyBlock, esc, every, fmtTime, icon, money, navigate, nl2br, openModal, orderStatus, refreshGlobal, toast } from '../core.js';
-import { accountTabsHTML, bindAccountTabs } from '../hub.js';
+import { $, $$, S, api, avatar, chip, clearTimers, closeModal, emptyBlock, esc, every, fmtTime, icon, money, navigate, nl2br, openModal, orderStatus, refreshGlobal, toast } from '../core.js?v=20261021-2';
+import { accountTabsHTML, bindAccountTabs } from '../hub.js?v=20261021-2';
 
   // =========================================================
   // Seller agent chat

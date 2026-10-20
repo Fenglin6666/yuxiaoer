@@ -42,6 +42,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="鱼小二 · 多账号", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def static_no_store(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 if STATIC.exists():
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 

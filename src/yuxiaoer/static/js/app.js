@@ -1,16 +1,16 @@
 /* 鱼小二控制台 · 入口（原生 ESM，无构建） */
 
-import { $, ROUTE_META, S, clearTimers, closeModal, esc, icon, openAlertCenter, pad, parseRoute, refreshGlobal, renderNav, toast } from './core.js';
-import { initHub } from './hub.js';
-import { pageAccounts } from './pages/accounts.js';
-import { pageCatalog } from './pages/catalog.js';
-import { pageInbox } from './pages/inbox.js';
-import { pageNotify } from './pages/notify.js';
-import { pageOps } from './pages/ops.js';
-import { pageOrders } from './pages/orders.js';
-import { pageOverview } from './pages/overview.js';
-import { pageSeller } from './pages/seller.js';
-import { pageSettings } from './pages/settings.js';
+import { $, ROUTE_META, S, clearTimers, closeModal, esc, icon, openAlertCenter, pad, parseRoute, refreshGlobal, renderNav, toast } from './core.js?v=20261021-2';
+import { initHub } from './hub.js?v=20261021-2';
+import { pageAccounts } from './pages/accounts.js?v=20261021-2';
+import { pageCatalog } from './pages/catalog.js?v=20261021-2';
+import { pageInbox } from './pages/inbox.js?v=20261021-2';
+import { pageNotify } from './pages/notify.js?v=20261021-2';
+import { pageOps } from './pages/ops.js?v=20261021-2';
+import { pageOrders } from './pages/orders.js?v=20261021-2';
+import { pageOverview } from './pages/overview.js?v=20261021-2';
+import { pageSeller } from './pages/seller.js?v=20261021-2';
+import { pageSettings } from './pages/settings.js?v=20261021-2';
 
   async function renderRoute() {
     clearTimers();
