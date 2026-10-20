@@ -22,6 +22,8 @@ class _Job:
     label: str
     operation: Operation
     future: asyncio.Future
+    min_interval: float | None = None
+    jitter: float | None = None
 
 
 class WriteQueue:
@@ -53,7 +55,14 @@ class WriteQueue:
                 pass
             self.worker = None
 
-    async def run(self, operation: Operation, *, label: str = "write") -> Any:
+    async def run(
+        self,
+        operation: Operation,
+        *,
+        label: str = "write",
+        min_interval: float | None = None,
+        jitter: float | None = None,
+    ) -> Any:
         if self.risk_guard is not None:
             await self.risk_guard.ensure_closed()
         if not self.running:
@@ -65,7 +74,7 @@ class WriteQueue:
                 raise
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
-        await self.queue.put(_Job(label, operation, future))
+        await self.queue.put(_Job(label, operation, future, min_interval, jitter))
         return await future
 
     async def _run(self) -> None:
@@ -78,9 +87,11 @@ class WriteQueue:
                 if self.risk_guard is not None:
                     await self.risk_guard.ensure_closed()
                 gap = time.monotonic() - self.last_write_at
-                wait = max(0.0, self.min_interval - gap)
-                if self.jitter:
-                    wait += random.uniform(0, self.jitter)
+                interval = self.min_interval if job.min_interval is None else job.min_interval
+                jitter = self.jitter if job.jitter is None else job.jitter
+                wait = max(0.0, interval - gap)
+                if jitter:
+                    wait += random.uniform(0, jitter)
                 if wait > 0:
                     await asyncio.sleep(wait)
                 result = await job.operation()

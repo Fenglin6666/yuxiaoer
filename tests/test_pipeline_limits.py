@@ -1,30 +1,73 @@
-"""消息合并与历史补拉的上限逻辑测试。"""
+"""入口直投与历史补拉的上限逻辑测试。"""
 
 from __future__ import annotations
 
-import asyncio
 import time
 import unittest
 
-from yuxiaoer.buyer.conversation.ingest import IngestService, debounce_delay
+from yuxiaoer.buyer.conversation.ingest import IngestService
 from yuxiaoer.seller.platform.xianyu.ws import XianyuIM, rotate_batch
 
 
-class DebounceDelayTests(unittest.TestCase):
-    def test_normal_window(self) -> None:
-        self.assertEqual(debounce_delay(0, 1.5, 6), 1.5)
+class _FakeMessaging:
+    def __init__(self, duplicate: bool = False) -> None:
+        self.duplicate = duplicate
+        self.inbound: list[dict] = []
 
-    def test_capped_by_max_hold(self) -> None:
-        self.assertEqual(debounce_delay(5, 1.5, 6), 1.0)
+    async def ensure_conversation(self, buyer_id: str, item_id: str | None, nick: str = "") -> dict:
+        return {"id": "conv_1", "meta_json": "{}"}
 
-    def test_never_negative(self) -> None:
-        self.assertEqual(debounce_delay(10, 1.5, 6), 0.0)
+    async def add_inbound(self, conversation_id: str, text: str, **kwargs) -> dict:
+        self.inbound.append({"text": text, **kwargs})
+        if self.duplicate:
+            return {"id": "msg_dup", "duplicate": True}
+        return {"id": f"msg_{len(self.inbound)}", "duplicate": False}
 
-    def test_zero_max_hold_disables_cap(self) -> None:
-        self.assertEqual(debounce_delay(10, 1.5, 0), 1.5)
 
-    def test_negative_elapsed_treated_as_zero(self) -> None:
-        self.assertEqual(debounce_delay(-3, 1.5, 6), 1.5)
+class _FakeBuyer:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def handle_message(self, conversation_id: str, message_id: str) -> None:
+        self.calls.append((conversation_id, message_id))
+
+
+class IngestDirectTests(unittest.IsolatedAsyncioTestCase):
+    async def test_each_message_becomes_one_turn_in_order(self) -> None:
+        messaging = _FakeMessaging()
+        buyer = _FakeBuyer()
+        service = IngestService(None, messaging, buyer)  # type: ignore[arg-type]
+        for text in ("第一条", "第二条", "第三条"):
+            await service.submit_buyer_message(
+                buyer_id="buyer_1", text=text, item_id="item_1"
+            )
+        count = await service.flush()
+        service.stop()
+        self.assertEqual(count, 3)
+        self.assertEqual([c[1] for c in buyer.calls], ["msg_1", "msg_2", "msg_3"])
+        self.assertEqual([m["text"] for m in messaging.inbound], ["第一条", "第二条", "第三条"])
+
+    async def test_duplicate_does_not_enter_agent(self) -> None:
+        messaging = _FakeMessaging(duplicate=True)
+        buyer = _FakeBuyer()
+        service = IngestService(None, messaging, buyer)  # type: ignore[arg-type]
+        await service.submit_buyer_message(
+            buyer_id="buyer_1", text="重复", item_id="item_1", external_id="same"
+        )
+        await service.flush()
+        service.stop()
+        self.assertEqual(buyer.calls, [])
+
+    async def test_no_pre_agent_wait(self) -> None:
+        messaging = _FakeMessaging()
+        buyer = _FakeBuyer()
+        service = IngestService(None, messaging, buyer)  # type: ignore[arg-type]
+        started = time.monotonic()
+        await service.submit_buyer_message(buyer_id="buyer_1", text="现在", item_id="item_1")
+        await service.flush()
+        elapsed = time.monotonic() - started
+        service.stop()
+        self.assertLess(elapsed, 0.3, "进入 Agent 不应有 debounce 等待")
 
 
 class RotateBatchTests(unittest.TestCase):
@@ -40,24 +83,6 @@ class RotateBatchTests(unittest.TestCase):
 
     def test_empty(self) -> None:
         self.assertEqual(rotate_batch([], 0, 20), ([], 0))
-
-
-class _FakeSettings:
-    async def get_float(self, key: str, default: float = 0.0) -> float:
-        return {"merge_window_seconds": 0.05, "merge_max_seconds": 0.12}.get(key, default)
-
-
-class _FakeMessaging:
-    async def pending_inbound(self, conversation_id: str) -> list[dict]:
-        return []
-
-
-class _FakeBuyer:
-    def __init__(self) -> None:
-        self.calls: list[float] = []
-
-    async def handle_pending(self, conversation_id: str) -> None:
-        self.calls.append(time.monotonic())
 
 
 class _HistoryIM(XianyuIM):
@@ -84,30 +109,6 @@ class HistoryBatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(im._history_offset, 20)
         self.assertTrue(await im._poll_history_locked(0))
         self.assertEqual(im._history_offset, 0)
-
-
-class IngestBurstTests(unittest.IsolatedAsyncioTestCase):
-    async def test_continuous_messages_hit_max_hold(self) -> None:
-        buyer = _FakeBuyer()
-        service = IngestService(None, _FakeMessaging(), buyer, _FakeSettings())  # type: ignore[arg-type]
-        started = time.monotonic()
-        for _ in range(12):
-            service._schedule("conv_1")
-            await asyncio.sleep(0.02)
-        await asyncio.sleep(0.12)
-        service.stop()
-        self.assertTrue(buyer.calls, "应触发一次处理")
-        self.assertLess(buyer.calls[0] - started, 0.2, "连续消息不应无限推迟处理")
-
-    async def test_single_message_waits_window(self) -> None:
-        buyer = _FakeBuyer()
-        service = IngestService(None, _FakeMessaging(), buyer, _FakeSettings())  # type: ignore[arg-type]
-        started = time.monotonic()
-        service._schedule("conv_2")
-        await asyncio.sleep(0.1)
-        service.stop()
-        self.assertTrue(buyer.calls)
-        self.assertGreaterEqual(buyer.calls[0] - started, 0.03)
 
 
 if __name__ == "__main__":

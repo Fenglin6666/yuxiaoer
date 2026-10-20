@@ -61,12 +61,9 @@ LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "20"))
 LLM_COOLDOWN_SECONDS = int(os.getenv("LLM_COOLDOWN_SECONDS", "300"))
 
 # ---- 值守/护栏 ----
-MERGE_WINDOW_SECONDS = float(os.getenv("MERGE_WINDOW_SECONDS", "1.5"))
-# 连续消息不断重置合并窗口时的上限：避免买家持续发消息把首条消息无限期压住。
-MERGE_MAX_SECONDS = float(os.getenv("MERGE_MAX_SECONDS", "6"))
 BUYER_MAX_STEPS = 6
 SELLER_MAX_STEPS = 8
-RATE_LIMIT_PER_MINUTE = 2
+RATE_LIMIT_PER_MINUTE = int(os.getenv("YUXIAOER_REPLY_RATE_LIMIT", "12"))
 NIGHT_START_HOUR = 1
 NIGHT_END_HOUR = 7
 NIGHT_DELAY_TO = "07:30"
@@ -110,8 +107,6 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "floor_discount_pct": "85",
     "publish_default_price": "990",
     "publish_default_address": "杭州市",
-    "merge_window_seconds": str(MERGE_WINDOW_SECONDS),
-    "merge_max_seconds": str(MERGE_MAX_SECONDS),
     "night_mode": "1",
     "llm_enabled": "1" if LLM_ENABLED == "on" and LLM_API_KEY else "0",  # UI 开关；默认规则模式保证可跑
     "shop_name": SHOP_NAME,
@@ -127,8 +122,6 @@ DEFAULT_SETTINGS: dict[str, str] = {
 # UI 可修改的键（白名单）
 EDITABLE_SETTINGS = {
     "floor_discount_pct",
-    "merge_window_seconds",
-    "merge_max_seconds",
     "night_mode",
     "llm_enabled",
     "shop_name",

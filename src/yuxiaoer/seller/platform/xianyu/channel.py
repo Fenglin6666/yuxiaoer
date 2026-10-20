@@ -177,13 +177,7 @@ class NativeXianyuChannel(BaseChannel):
                 msg.get("chat_id"), msg.get("buyer_id"), msg.get("kind"),
             )
             return
-        platform_item_id = msg.get("item_id")
-        item_id = None
-        if platform_item_id:
-            row = await self.db.fetchone(
-                "SELECT id FROM items WHERE platform_item_id=? LIMIT 1", (str(platform_item_id),)
-            )
-            item_id = row["id"] if row else await self._ensure_item(str(platform_item_id))
+        platform_item_id = str(msg.get("item_id") or "").strip() or None
         buyer_id = str(msg.get("buyer_id") or "").strip()
         if not buyer_id:
             self._diagnostics["inbound_empty_buyer"] += 1
@@ -194,42 +188,18 @@ class NativeXianyuChannel(BaseChannel):
             external_id = "ws:" + hashlib.sha1(
                 f"{msg.get('chat_id')}:{msg.get('timestamp')}:{text}".encode("utf-8")
             ).hexdigest()[:24]
+        # Agent 前只做入队；商品/会话/去重都在 IngestService 的 worker 里完成。
         result = await self.runtime.ingest.submit_buyer_message(
             buyer_id=buyer_id, nick=str(msg.get("buyer_nick") or "闲鱼买家"),
-            item_id=item_id, text=text, external_id=external_id,
-            platform_chat_id=str(msg.get("chat_id") or ""),
+            item_id=None, platform_item_id=platform_item_id, text=text,
+            external_id=external_id,
+            platform_chat_id=str(msg.get("chat_id") or "") or None,
         )
-        if not result.get("duplicate"):
+        if result.get("queued"):
             self._last_inbound_at = iso()
             log.info("native inbound buyer=%s text=%s", buyer_id, text[:80])
-        # 保存平台 chat_id，后续发消息用
-        row = await self.db.fetchone("SELECT * FROM conversations WHERE id=?", (result["conversation_id"],))
-        if row:
-            meta = loads(row["meta_json"], {}) or {}
-            meta.update({"platform_chat_id": msg.get("chat_id"), "platform_buyer_id": buyer_id, "source": "xianyu_ws"})
-            await self.db.execute(
-                "UPDATE conversations SET meta_json=?,updated_at=? WHERE id=?",
-                (dumps(meta), iso(), row["id"]),
-            )
         if any(k in text for k in ("已付款", "待发货", "已拍下", "退款申请")):
             asyncio.create_task(self.sync_orders())
-
-    async def _ensure_item(self, platform_id: str) -> str:
-        item_id = f"xyitem_{platform_id}"
-        now = iso()
-        await self.db.execute(
-            """INSERT OR IGNORE INTO items(id,platform_item_id,title,description,price_cents,floor_price_cents,
-               max_discount_pct,category,condition,delivery_mode,stock,status,card_content,link_url,image_hint,
-               knowledge_version,relist_count,relist_limit,sold_count,created_at,updated_at,meta_json)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                item_id, platform_id, f"平台商品 {platform_id}",
-                "来自 WebSocket 消息的自动占位商品；请补充标题、描述和卡券。",
-                1, 1, 15, "平台同步", "二手", "physical", 1, "live", None, None, "📦",
-                0, 0, 3, 0, now, now, dumps({"source": "xianyu_ws"}),
-            ),
-        )
-        return item_id
 
     async def send_message(self, buyer_id: str, text: str, *, conversation_id: str, item_id: str | None = None) -> str:
         if not self.im or not self.im.connected:

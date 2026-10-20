@@ -189,7 +189,7 @@ class MessagingService:
         if row and int(row["n"] or 0) >= config.RATE_LIMIT_PER_MINUTE:
             first = parse_iso(row["first_at"])
             target = first + timedelta(minutes=1, seconds=1)
-            return "回复频控（1 分钟 ≤ 2 条）", iso(target)
+            return f"回复频控（1 分钟 ≤ {config.RATE_LIMIT_PER_MINUTE} 条）", iso(target)
         return None, None
 
     async def send_reply(
@@ -246,6 +246,8 @@ class MessagingService:
                     item_id=conversation.get("item_id"),
                 ),
                 label=f"send:{conversation['id']}",
+                min_interval=0.3,
+                jitter=0.15,
             )
         except Exception as exc:  # noqa: BLE001
             await self.alerts.create(

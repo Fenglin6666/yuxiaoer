@@ -77,7 +77,7 @@ YUXIAOER_CONSOLE_PASSWORD=change-me
 | 扫码失败 | 检查网络 / 代理；`/api/status` 看 `channel.detail`；二维码约 3 分钟过期，重试 |
 | 人脸验证 | 平台要求时只显示验证页，由用户手机完成，不自动化 |
 | WS 连接失败 | 看账号 `ws_state` 与服务日志；Cookie / Token 是否有效；重新扫码或刷新 |
-| 买家消息没回复 | 频控 2 条 / 分钟、夜间延迟、outbox；看客服工作台 |
+| 买家消息没回复 | 频控 12 条 / 分钟、夜间延迟、outbox；看客服工作台 |
 | 订单不同步 | `GET /api/status` 的 `channel.order_sync`；Cookie / Token；`XY_ORDER_SYNC_SECONDS` |
 | 订单不自动发货 | 商品是否绑定平台 ID、是否 virtual、卡券是否有库存 |
 | 无卡券可发 | 商品详情补卡券；订单详情可补发 |
@@ -144,7 +144,7 @@ $env:PYTHONPATH = "<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-当前 44 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
+当前 40 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
 
 ## 12. 已知限制
 

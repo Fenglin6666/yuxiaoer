@@ -1,54 +1,33 @@
-"""入口消息合并器：同一买家 5 秒内的多条消息合并为一轮。
+"""入口直投网关：每条买家消息立即进入 Agent，不做合并、不做 debounce。
 
-- 每个会话一个 debounce timer；
-- Agent 处理期间到达的新消息，处理完后再起一轮；
-- 生产默认 5s，可通过设置调小。
+之前的 IngestService 会把同一会话的消息攒 1.5 秒再处理；现在改成：
+- 消息按会话进入独立 FIFO 队列；
+- 每个会话一个 worker，严格“一条消息一个 turn、一条回复”；
+- 入队前不做数据库查询，商品/会话/去重都在 worker 里、进入 Agent 边界时处理。
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import Any
 
 from yuxiaoer.buyer.conversation.agent import BuyerAgent
-from yuxiaoer.core import config
 from yuxiaoer.core.db import Database
-from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.util import dumps, iso, loads
 from yuxiaoer.shared.ports import MessagingPort
 
 log = logging.getLogger("yuxiaoer.ingest")
 
 
-def debounce_delay(elapsed: float, window: float, max_hold: float) -> float:
-    """本次还要等多久：不超过 window，也不超过“首条消息起 max_hold”。
-
-    连续消息会不断取消并重建 timer；没有这个上限时，买家持续发消息会把
-    首条消息无限期压住（turn.latency 里表现为几十秒的 pre-agent 延迟）。
-    """
-    window = max(0.0, window)
-    if max_hold <= 0:
-        return window
-    return max(0.0, min(window, max_hold - max(0.0, elapsed)))
-
-
 class IngestService:
-    def __init__(
-        self,
-        db: Database,
-        messaging: MessagingPort,
-        buyer: BuyerAgent,
-        settings: SettingsService,
-    ):
+    def __init__(self, db: Database, messaging: MessagingPort, buyer: BuyerAgent):
         self.db = db
         self.messaging = messaging
         self.buyer = buyer
-        self.settings = settings
-        self._timers: dict[str, asyncio.Task] = {}
-        self._burst_started: dict[str, float] = {}
-        self._processing: set[str] = set()
+        self._queues: dict[str, asyncio.Queue[dict[str, Any]]] = {}
+        self._workers: dict[str, asyncio.Task] = {}
+        self._recovery: set[asyncio.Task] = set()
         self._stopped = False
         self.processed_turns = 0
 
@@ -61,119 +40,141 @@ class IngestService:
         nick: str = "闲鱼买家",
         external_id: str | None = None,
         platform_chat_id: str | None = None,
+        platform_item_id: str | None = None,
     ) -> dict[str, Any]:
-        conv = await self.messaging.ensure_conversation(buyer_id, item_id, nick=nick)
+        """只入队，不做数据库 IO——这是 Agent 前唯一的动作。"""
+        if self._stopped:
+            return {"queued": False, "error": "ingest stopped"}
+        key = f"{buyer_id}|{item_id or platform_item_id or ''}"
+        queue = self._queues.get(key)
+        if queue is None:
+            queue = asyncio.Queue()
+            self._queues[key] = queue
+            self._workers[key] = asyncio.create_task(
+                self._worker(key, queue), name=f"ingest:{key}"
+            )
+        await queue.put({
+            "buyer_id": buyer_id,
+            "nick": nick,
+            "text": text,
+            "item_id": item_id,
+            "platform_item_id": platform_item_id,
+            "external_id": external_id,
+            "platform_chat_id": platform_chat_id,
+        })
+        return {"queued": True, "queue": key}
+
+    async def _worker(self, key: str, queue: asyncio.Queue[dict[str, Any]]) -> None:
+        while True:
+            job = await queue.get()
+            try:
+                await self._handle_job(job)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001
+                log.exception("ingest job failed: %s", key)
+            finally:
+                queue.task_done()
+
+    async def _handle_job(self, job: dict[str, Any]) -> None:
+        item_id = job.get("item_id")
+        if not item_id and job.get("platform_item_id"):
+            item_id = await self._resolve_item(str(job["platform_item_id"]))
+
+        conv = await self.messaging.ensure_conversation(
+            job["buyer_id"], item_id, nick=job["nick"]
+        )
         if not conv:
             raise RuntimeError("无法创建会话")
-        if platform_chat_id:
+
+        chat_id = job.get("platform_chat_id")
+        if chat_id:
             meta = loads(conv.get("meta_json"), {}) or {}
             meta.update({
-                "platform_chat_id": str(platform_chat_id).replace("@goofish", ""),
-                "platform_buyer_id": str(buyer_id).replace("@goofish", ""),
+                "platform_chat_id": str(chat_id).replace("@goofish", ""),
+                "platform_buyer_id": str(job["buyer_id"]).replace("@goofish", ""),
                 "source": "xianyu_ws",
             })
             await self.db.execute(
                 "UPDATE conversations SET meta_json=?,updated_at=? WHERE id=?",
                 (dumps(meta), iso(), conv["id"]),
             )
+
         msg = await self.messaging.add_inbound(
-            conv["id"], text, external_id=external_id, meta={"source": "buyer_channel"}
+            conv["id"], job["text"], external_id=job.get("external_id"),
+            meta={"source": "buyer_channel"},
         )
         if msg.get("duplicate"):
-            return {"conversation_id": conv["id"], "message_id": msg.get("id"), "duplicate": True}
-        self._schedule(conv["id"])
-        return {"conversation_id": conv["id"], "message_id": msg.get("id"), "session_id": conv["session_id"]}
+            return
+        await self.buyer.handle_message(conv["id"], msg["id"])
+        self.processed_turns += 1
 
-    def _schedule(self, conversation_id: str) -> None:
-        if self._stopped:
-            return
-        self._burst_started.setdefault(conversation_id, time.monotonic())
-        existing = self._timers.get(conversation_id)
-        if existing and not existing.done():
-            existing.cancel()
-        task = asyncio.create_task(self._run_later(conversation_id), name=f"ingest:{conversation_id}")
-        self._timers[conversation_id] = task
-
-    async def _run_later(self, conversation_id: str) -> None:
-        try:
-            window = await self.settings.get_float("merge_window_seconds", 1.5)
-            max_hold = await self.settings.get_float(
-                "merge_max_seconds", config.MERGE_MAX_SECONDS
-            )
-            started = self._burst_started.get(conversation_id)
-            elapsed = time.monotonic() - started if started is not None else 0.0
-            await asyncio.sleep(debounce_delay(elapsed, window, max_hold))
-        except asyncio.CancelledError:
-            return
-        if conversation_id in self._processing:
-            return
-        self._timers.pop(conversation_id, None)
-        self._processing.add(conversation_id)
-        try:
-            await self.buyer.handle_pending(conversation_id)
-            self.processed_turns += 1
-        except Exception:  # noqa: BLE001
-            log.exception("ingest processing failed")
-        finally:
-            self._processing.discard(conversation_id)
-            self._burst_started.pop(conversation_id, None)
-        pending = await self.messaging.pending_inbound(conversation_id)
-        if pending:
-            self._schedule(conversation_id)
+    async def _resolve_item(self, platform_id: str) -> str:
+        row = await self.db.fetchone(
+            "SELECT id FROM items WHERE platform_item_id=? LIMIT 1", (platform_id,)
+        )
+        if row:
+            return row["id"]
+        item_id = f"xyitem_{platform_id}"
+        now = iso()
+        await self.db.execute(
+            """INSERT OR IGNORE INTO items(id,platform_item_id,title,description,price_cents,floor_price_cents,
+               max_discount_pct,category,condition,delivery_mode,stock,status,card_content,link_url,image_hint,
+               knowledge_version,relist_count,relist_limit,sold_count,created_at,updated_at,meta_json)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                item_id, platform_id, f"平台商品 {platform_id}",
+                "来自 WebSocket 消息的自动占位商品；请补充标题、描述和卡券。",
+                1, 1, 15, "平台同步", "二手", "physical", 1, "live", None, None, "📦",
+                0, 0, 3, 0, now, now, dumps({"source": "xianyu_ws"}),
+            ),
+        )
+        return item_id
 
     async def recover_pending(self) -> int:
-        """服务重启后，把已入库但没处理完的入站消息重新排期。"""
+        """重启后把未处理消息逐条投回 Agent，不做合并。"""
         rows = await self.db.fetchall(
             "SELECT DISTINCT conversation_id FROM messages WHERE direction='in' AND processed=0"
         )
         for row in rows:
-            self._schedule(row["conversation_id"])
+            task = asyncio.create_task(
+                self._recover_conversation(row["conversation_id"]),
+                name=f"ingest-recover:{row['conversation_id']}",
+            )
+            self._recovery.add(task)
+            task.add_done_callback(self._recovery.discard)
         return len(rows)
 
-    async def flush(self) -> int:
-        """测试/运维用：取消等待窗口，立即处理所有 pending。"""
-        for task in list(self._timers.values()):
-            task.cancel()
-        self._timers.clear()
-        self._burst_started.clear()
-        # 如果某个会话已经在处理，等它结束，避免调用方读到半成品
-        for _ in range(200):
-            if not self._processing:
-                break
-            await asyncio.sleep(0.01)
+    async def _recover_conversation(self, conversation_id: str) -> None:
         rows = await self.db.fetchall(
-            "SELECT DISTINCT conversation_id FROM messages WHERE direction='in' AND processed=0"
+            "SELECT id FROM messages WHERE conversation_id=? AND direction='in' AND processed=0 "
+            "ORDER BY created_at,id",
+            (conversation_id,),
         )
-        count = 0
         for row in rows:
-            conv_id = row["conversation_id"]
-            if conv_id in self._processing:
-                continue
-            self._processing.add(conv_id)
             try:
-                await self.buyer.handle_pending(conv_id)
-                count += 1
-            finally:
-                self._processing.discard(conv_id)
-        return count
+                await self.buyer.handle_message(conversation_id, row["id"])
+            except Exception:  # noqa: BLE001
+                log.exception("ingest recover failed: %s", conversation_id)
+
+    async def flush(self) -> int:
+        """测试/运维用：等当前所有队列处理完。"""
+        await asyncio.gather(*(q.join() for q in self._queues.values()))
+        return self.processed_turns
 
     def stop(self) -> None:
         self._stopped = True
-        for task in self._timers.values():
+        for task in self._workers.values():
             task.cancel()
-        self._timers.clear()
-        self._burst_started.clear()
-
-    def cancel_pending(self) -> None:
-        for task in self._timers.values():
+        self._workers.clear()
+        self._queues.clear()
+        for task in self._recovery:
             task.cancel()
-        self._timers.clear()
-        self._burst_started.clear()
+        self._recovery.clear()
 
     def stats(self) -> dict[str, Any]:
         return {
-            "timers": len(self._timers),
-            "processing": len(self._processing),
-            "bursts": len(self._burst_started),
+            "queues": len(self._queues),
+            "workers": len(self._workers),
             "processed_turns": self.processed_turns,
         }

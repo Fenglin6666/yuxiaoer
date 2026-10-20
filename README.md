@@ -72,7 +72,7 @@ cd <项目目录>
 WS /s/vulcan
   → normalize_messages（base64 / MessagePack，过滤自己发的回显）
   → NativeXianyuChannel（买家、会话、商品、chat_id）
-  → IngestService（1.5s 合并、去重、重启恢复）
+  → IngestService（每条消息独立入队、去重、重启恢复）
   → BuyerAgent（规则分类 → 知识检索 / 议价 / 售后）
   → MessagingService（频控、夜间排期、outbox）
   → WriteQueue → XianyuIM.send_text
@@ -94,7 +94,7 @@ WS /s/vulcan
 src/yuxiaoer/
   core/          配置、SQLite、事件总线、状态机、LLM、设置
   shared/        知识库、工具调用记录、跨域窄接口
-  buyer/         消息理解、议价、买家 Agent、消息合并
+  buyer/         消息理解、议价、买家 Agent、入口直投
   seller/
     agent.py     入口路由 + 回复
     commands/    确认门 / 上架 / 下架改价发货 / 文本解析
@@ -109,7 +109,7 @@ src/yuxiaoer/
   static/        无构建控制台（js/app.js + js/core.js + js/pages/）
   runtime.py     服务装配与生命周期
   main.py        FastAPI 入口
-tests/           44 个单元测试
+tests/           40 个单元测试
 docs/            架构、协议、外部接口
 RUNBOOK.md       运维手册
 ```
@@ -128,8 +128,7 @@ RUNBOOK.md       运维手册
 | `XY_WS_URL` | `wss://wss-goofish.dingtalk.com/` | IM WebSocket |
 | `XY_ORDER_SYNC_SECONDS` | `60` | 订单同步周期 |
 | `AMAP_KEY` | 空 | 可选；不配时用内置城市坐标兜底 |
-| `MERGE_WINDOW_SECONDS` | `1.5` | 买家消息合并窗口 |
-| `MERGE_MAX_SECONDS` | `6` | 连续消息不断重置合并窗口时的最大等待上限 |
+| `YUXIAOER_REPLY_RATE_LIMIT` | `12` | 每个会话每分钟最多自动回复条数；超出写 outbox 排期 |
 | `LLM_ENABLED` | `off` | 可选 LLM；关闭时纯规则模式 |
 | 通知 env | 空 | 见 `.env.example` |
 
@@ -140,7 +139,7 @@ $env:PYTHONPATH="<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-当前 44 个测试，覆盖规则分类、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手、合并窗口上限与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
+当前 40 个测试，覆盖规则分类、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手、入口直投与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
 
 ## 8. 外部接口
 

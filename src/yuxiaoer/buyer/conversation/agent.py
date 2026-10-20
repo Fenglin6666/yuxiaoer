@@ -66,18 +66,34 @@ class BuyerAgent:
     # ---------------- 入口 ----------------
 
     async def handle_pending(self, conversation_id: str) -> dict[str, Any] | None:
+        """恢复/补偿路径：逐条处理，不合并。"""
         lock = self._locks.setdefault(conversation_id, asyncio.Lock())
         async with lock:
-            return await self._handle_locked(conversation_id)
+            pending = await self.messaging.pending_inbound(conversation_id)
+            result = None
+            for message in pending:
+                result = await self._process(conversation_id, [message])
+            return result
 
-    async def _handle_locked(self, conversation_id: str) -> dict[str, Any] | None:
+    async def handle_message(self, conversation_id: str, message_id: str) -> dict[str, Any] | None:
+        """主路径：一条消息一个 turn，立即处理。"""
+        lock = self._locks.setdefault(conversation_id, asyncio.Lock())
+        async with lock:
+            row = await self.db.fetchone("SELECT * FROM messages WHERE id=?", (message_id,))
+            if not row:
+                return None
+            row = dict(row)
+            if int(row.get("processed") or 0):
+                return None
+            return await self._process(conversation_id, [row])
+
+    async def _process(
+        self, conversation_id: str, pending: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
         conv = await self.db.fetchone("SELECT * FROM conversations WHERE id=?", (conversation_id,))
-        if not conv:
+        if not conv or not pending:
             return None
         conv = dict(conv)
-        pending = await self.messaging.pending_inbound(conversation_id)
-        if not pending:
-            return None
 
         # 人工接管中：不自动回复，但仍标记已处理，避免积压
         if conv.get("handoff"):

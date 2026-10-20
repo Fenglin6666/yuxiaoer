@@ -16,7 +16,6 @@ export async function pageSettings() {
             <div class="card-head"><div><div class="card-title">${icon('settings')} 托管策略</div><div class="card-sub">影响买家 Agent 的议价与回复节奏</div></div></div>
             <div class="form-grid">
               <div class="field"><label>商品底价折扣（%）</label><input class="input" id="setFloor" type="number" min="50" max="100" value="${esc(v.floor_discount_pct || 85)}" /><div class="hint">新商品底价 = 售价 × 该比例；买家侧永不展示底价。</div></div>
-              <div class="field"><label>消息合并窗口（秒）</label><input class="input" id="setMerge" type="number" min="0" max="30" step="0.5" value="${esc(v.merge_window_seconds || 1.5)}" /><div class="hint">同一买家在窗口内的多条消息合并为一轮，生产建议 5 秒。</div></div>
               <div class="field"><label>议价轮数上限</label><input class="input" id="setBargainRounds" type="number" min="1" max="10" value="${esc(v.bargain_max_rounds || 3)}" /><div class="hint">到达上限后只守底价，不再让步。</div></div>
               <div class="field"><label>店铺名</label><input class="input" id="setShop" value="${esc(v.shop_name || '')}" /></div>
               <div class="field"><label>风控熔断冷却（分钟）</label><input class="input" id="setRiskCooldown" type="number" min="1" max="180" value="${esc(v.risk_cooldown_minutes || 30)}" /></div>
@@ -78,7 +77,6 @@ export async function pageSettings() {
 export async function saveSettings() {
     const values = {
       floor_discount_pct: Number($('#setFloor').value),
-      merge_window_seconds: Number($('#setMerge').value),
       bargain_max_rounds: Number($('#setBargainRounds').value),
       risk_cooldown_minutes: Number($('#setRiskCooldown').value),
       polish_time: $('#setPolishTime').value,

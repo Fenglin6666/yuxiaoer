@@ -125,7 +125,7 @@ class Runtime:
             self.db, self.bus, self.messaging, self.alerts, self.knowledge,
             self.channel, self.queue, self.settings, self.delivery,
         )
-        self.ingest = IngestService(self.db, self.messaging, self.buyer, self.settings)
+        self.ingest = IngestService(self.db, self.messaging, self.buyer)
         self.patrol = PatrolService(
             self.db, self.bus, self.channel, self.queue, self.alerts,
             self.knowledge, self.messaging, self.settings,

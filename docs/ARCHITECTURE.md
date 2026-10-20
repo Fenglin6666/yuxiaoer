@@ -67,7 +67,7 @@ main.py
 | `buyer/conversation/gateway.py` | 9 类规则分类，可解释、无 LLM 依赖 |
 | `buyer/conversation/bargain.py` | 议价：解析报价、守底价、反报价 |
 | `buyer/conversation/agent.py` | 买家 Agent：分支处理、工具白名单、转人工 |
-| `buyer/conversation/ingest.py` | 消息合并窗口、去重、重启恢复 |
+| `buyer/conversation/ingest.py` | 入口直投：每会话 FIFO、每条消息一个 turn、去重、重启恢复 |
 | `seller/agent.py` | 店主指令入口：确认词、固定指令、正则路由、回复 |
 | `seller/commands/` | `confirm` 确认门 / `listing` 上架 / `actions` 下架改价发货 / `parsing` 文本解析 |
 | `seller/confirmations.py` | 确认项生命周期（30 分钟 TTL） |
@@ -90,8 +90,8 @@ WS /s/vulcan
        商品：platform_item_id → 本地 item_id，缺失则建占位商品
        去重：messageId，缺失则 sha1(chat_id + ts + text)
   → IngestService
-       ensure_conversation → add_inbound → 合并窗口（默认 1.5s，最长等待 6s）
-       处理期间新消息到达 → 处理完再起一轮
+       每会话 FIFO；submit 只入队，商品/会话/去重都在 worker 里
+       一条消息一个 turn，不做 debounce、不合并
   → BuyerAgent
        每会话一把 asyncio.Lock 串行；建 turn → classify → 分支 → 工具
   → MessagingService
@@ -166,9 +166,9 @@ order: new → paid → shipped → delivered → done
 
 ## 8. 护栏
 
-1. **单写队列**：所有平台写操作串行，最小间隔 2s + 0–1.5s 抖动；
+1. **单写队列**：平台写操作串行；消息发送 0.3s + 0.15s 抖动，发布/改价等仍为 2s + 0–1.5s 抖动；
 2. **风控熔断**：错误文本匹配风控信号 → 冷却（默认 30 分钟），期间写操作 fail-fast；
-3. **频控与夜间**：2 条 / 分钟；01:00–07:00 不回复，排到 07:30；
+3. **频控与夜间**：默认 12 条 / 分钟（`YUXIAOER_REPLY_RATE_LIMIT`）；01:00–07:00 不回复，排到 07:30；
 4. **确认门**：钱路动作先出预览，30 分钟 TTL，可编辑后执行；
 5. **工具步数上限 + 重复调用熔断**：买家 6 步、卖家 8 步；
 6. **乐观锁状态机**：并发 / 乱序下宁可拒绝；

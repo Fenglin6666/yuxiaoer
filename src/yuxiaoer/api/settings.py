@@ -30,8 +30,6 @@ async def set_settings(payload: SettingsIn) -> dict[str, Any]:
             continue
         if key == "floor_discount_pct":
             value = max(50, min(100, int(value)))
-        if key == "merge_window_seconds":
-            value = max(0.0, min(30.0, float(value)))
         if key in ("night_mode", "auto_relist", "auto_review", "human_typing"):
             value = 1 if str(value).lower() in ("1", "true", "on", "yes") else 0
         if key == "relist_limit":
