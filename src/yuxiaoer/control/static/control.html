@@ -23,6 +23,14 @@
   h2{font-size:15px;margin:22px 0 10px}.alert{padding:9px 10px;border-bottom:1px solid var(--line)}.alert:last-child{border-bottom:0}
   .pill{font-size:11px;padding:2px 7px;border-radius:99px;background:#eef2f6;color:#475467}
   .err{color:var(--bad);font-size:13px}.hide{display:none}
+  .workbench{display:grid;grid-template-columns:360px 1fr;gap:14px}
+  .conv{padding:10px;border-bottom:1px solid var(--line);cursor:pointer}.conv:hover{background:#f9fafb}
+  .conv.active{background:#eef4ff;border-left:3px solid var(--brand)}
+  .conv .name{font-weight:600}.conv .last{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .thread{height:420px;overflow:auto;background:#f9fafb;border:1px solid var(--line);border-radius:10px;padding:10px}
+  .msg{max-width:78%;margin:6px 0;padding:8px 10px;border-radius:10px;background:#fff;border:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+  .msg.out{margin-left:auto;background:#e8f1ff;border-color:#c7ddff}.msg .meta{font-size:10px;color:var(--muted);margin-bottom:3px}
+  textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}
 </style>
 </head>
 <body>
@@ -36,6 +44,49 @@
     <div class="card"><div class="muted">在线</div><div class="kpi" id="kpi-online">-</div></div>
     <div class="card"><div class="muted">未处理告警</div><div class="kpi" id="kpi-alerts">-</div></div>
     <div class="card"><div class="muted">控制面</div><div class="kpi" style="font-size:16px;margin-top:8px">运行中</div></div>
+  </div>
+
+  <h2>统一工作台</h2>
+  <div class="card">
+    <div class="row">
+      <select id="wb-shop"><option value="">全部店铺</option></select>
+      <select id="wb-filter">
+        <option value="active">进行中</option>
+        <option value="handoff">待接管</option>
+        <option value="all">全部</option>
+      </select>
+      <button onclick="loadConversations()">刷新会话</button>
+      <button onclick="loadSeller()">店主指令</button>
+      <span class="muted" id="wb-hint">选择会话后可人工回复或接管；店主指令可让小二上下架/改价/发布。</span>
+    </div>
+    <div class="workbench" style="margin-top:12px">
+      <div class="card" style="padding:0;max-height:560px;overflow:auto">
+        <div id="conv-list"><div class="muted" style="padding:12px">加载中…</div></div>
+      </div>
+      <div class="card">
+        <div id="conv-head" class="muted">选择左侧会话查看消息</div>
+        <div id="thread" class="thread"><div class="muted">暂无消息</div></div>
+        <textarea id="reply-text" rows="3" placeholder="人工回复给买家…" style="margin-top:10px"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="primary" onclick="sendReply()">发送回复</button>
+          <button onclick="conversationAction('takeover')">接管</button>
+          <button onclick="conversationAction('resume')">恢复 AI</button>
+          <span class="err" id="conv-error"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>店主指令 / 上下架</h2>
+  <div class="card">
+    <div id="seller-head" class="muted">选择具体店铺后，可对小二说：把 xxx 下架、把 xxx 改价 199、发布 …</div>
+    <div id="seller-thread" class="thread" style="height:220px;margin-top:10px"></div>
+    <textarea id="seller-text" rows="3" placeholder="例如：把「白色空军一号」下架；或：把 xxx 改价 199" style="margin-top:10px"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" onclick="sendSeller()">发送给小二</button>
+      <span class="err" id="seller-error"></span>
+    </div>
+    <div id="pending"></div>
   </div>
 
   <h2>店铺</h2>
@@ -124,6 +175,7 @@ async function loadShops() {
         <button onclick="action('${esc(s.id)}','schedule')">排期</button>
       </td>
     </tr>`).join('') || '<tr><td colspan="5" class="muted">还没有店铺</td></tr>';
+  fillShopSelect(data.shops);
 }
 
 async function action(id, action) {
@@ -193,6 +245,125 @@ async function saveUser() {
   } catch (err) { $('user-error').textContent = err.message; }
 }
 
+let currentConv = null;
+
+function fillShopSelect(shops) {
+  const select = $('wb-shop');
+  const current = select.value;
+  select.innerHTML = '<option value="">全部店铺</option>' +
+    shops.map(s => `<option value="${esc(s.id)}">${esc(s.name)}（${esc(s.id)}）</option>`).join('');
+  if (shops.some(s => s.id === current)) select.value = current;
+}
+
+async function loadConversations() {
+  const shop = $('wb-shop').value;
+  const filter = $('wb-filter').value;
+  $('conv-list').innerHTML = '<div class="muted" style="padding:12px">加载中…</div>';
+  try {
+    const data = await api(`/api/control/workbench/conversations?shop_id=${encodeURIComponent(shop)}&filter=${filter}`);
+    $('wb-hint').textContent = data.errors && data.errors.length
+      ? `部分店铺不可达：${data.errors.map(e => e.shop_id).join(', ')}`
+      : '选择会话后可人工回复或接管；店主指令可让小二上下架/改价/发布。';
+    $('conv-list').innerHTML = data.conversations.map(c => `
+      <div class="conv ${currentConv && currentConv.convId === c.id && currentConv.shopId === c.shop_id ? 'active' : ''}"
+           onclick="openConversation('${esc(c.shop_id)}','${esc(c.id)}')">
+        <div class="name">${esc(c.buyer_nick || '买家')} <span class="pill">${esc(c.shop_name || c.shop_id)}</span></div>
+        <div class="muted">${esc(c.item_title || '未绑定商品')} ${c.handoff ? '<span class="pill">待接管</span>' : ''}</div>
+        <div class="last">${esc(c.last_text || '')}</div>
+      </div>`).join('') || '<div class="muted" style="padding:12px">没有会话</div>';
+  } catch (err) {
+    $('conv-list').innerHTML = `<div class="err" style="padding:12px">${esc(err.message)}</div>`;
+  }
+}
+
+async function openConversation(shopId, conversationId) {
+  $('conv-error').textContent = '';
+  try {
+    const data = await api(`/api/control/workbench/${encodeURIComponent(shopId)}/conversations/${encodeURIComponent(conversationId)}`);
+    currentConv = {shopId, convId: conversationId};
+    const conv = data.conversation || {};
+    $('conv-head').innerHTML = `<b>${esc(data.buyer?.nick || conv.buyer_nick || '买家')}</b>
+      <span class="pill">${esc(data.shop_name || shopId)}</span>
+      <span class="muted">${esc(data.item?.title || '未绑定商品')}</span>`;
+    $('thread').innerHTML = (data.messages || []).map(m => `
+      <div class="msg ${m.direction === 'out' ? 'out' : ''}">
+        <div class="meta">${esc(m.role || '')} · ${esc(m.created_at || '')}</div>${esc(m.text || '')}
+      </div>`).join('') || '<div class="muted">暂无消息</div>';
+    $('thread').scrollTop = $('thread').scrollHeight;
+    await loadConversations();
+  } catch (err) { $('conv-error').textContent = err.message; }
+}
+
+async function sendReply() {
+  if (!currentConv) { $('conv-error').textContent = '请先选择会话'; return; }
+  const text = $('reply-text').value.trim();
+  if (!text) { $('conv-error').textContent = '回复不能为空'; return; }
+  $('conv-error').textContent = '';
+  try {
+    await api(`/api/control/workbench/${encodeURIComponent(currentConv.shopId)}/conversations/${encodeURIComponent(currentConv.convId)}/reply`,
+      {method: 'POST', body: JSON.stringify({text})});
+    $('reply-text').value = '';
+    await openConversation(currentConv.shopId, currentConv.convId);
+  } catch (err) { $('conv-error').textContent = err.message; }
+}
+
+async function conversationAction(action) {
+  if (!currentConv) { $('conv-error').textContent = '请先选择会话'; return; }
+  try {
+    await api(`/api/control/workbench/${encodeURIComponent(currentConv.shopId)}/conversations/${encodeURIComponent(currentConv.convId)}/${action}`,
+      {method: 'POST', body: '{}'});
+    await openConversation(currentConv.shopId, currentConv.convId);
+  } catch (err) { $('conv-error').textContent = err.message; }
+}
+
+function renderSeller(data) {
+  const messages = data.messages || [];
+  $('seller-thread').innerHTML = messages.map(m => `
+    <div class="msg ${m.direction === 'out' ? 'out' : ''}">
+      <div class="meta">${esc(m.role || '')} · ${esc(m.created_at || '')}</div>${esc(m.text || '')}
+    </div>`).join('') || '<div class="muted">暂无店主指令记录</div>';
+  const pending = data.pending || [];
+  $('pending').innerHTML = pending.map(p => `
+    <div class="alert"><b>待确认：${esc(p.title || p.kind || '')}</b>
+    <div class="muted">${esc(p.preview || p.summary || '')}</div>
+    <button onclick="confirmAction('${esc(p.id)}','confirm')">确认</button>
+    <button class="danger" onclick="confirmAction('${esc(p.id)}','cancel')">取消</button></div>`).join('');
+}
+
+async function loadSeller() {
+  const shop = $('wb-shop').value;
+  $('seller-error').textContent = '';
+  if (!shop) { $('seller-error').textContent = '请先选择具体店铺'; return; }
+  try {
+    const data = await api(`/api/control/workbench/${encodeURIComponent(shop)}/seller`);
+    $('seller-head').innerHTML = `当前店铺：<b>${esc(data.shop_name || shop)}</b>`;
+    renderSeller(data);
+  } catch (err) { $('seller-error').textContent = err.message; }
+}
+
+async function sendSeller() {
+  const shop = $('wb-shop').value;
+  const text = $('seller-text').value.trim();
+  if (!shop || !text) { $('seller-error').textContent = '请选择具体店铺并输入指令'; return; }
+  $('seller-error').textContent = '';
+  try {
+    await api(`/api/control/workbench/${encodeURIComponent(shop)}/seller`,
+      {method: 'POST', body: JSON.stringify({text})});
+    $('seller-text').value = '';
+    await loadSeller();
+  } catch (err) { $('seller-error').textContent = err.message; }
+}
+
+async function confirmAction(id, action) {
+  const shop = $('wb-shop').value;
+  if (!shop) return;
+  try {
+    await api(`/api/control/workbench/${encodeURIComponent(shop)}/confirmations/${encodeURIComponent(id)}/${action}`,
+      {method: 'POST', body: '{}'});
+    await loadSeller();
+  } catch (err) { $('seller-error').textContent = err.message; }
+}
+
 (async () => {
   try {
     const me = await api('/api/control/me');
@@ -200,7 +371,7 @@ async function saveUser() {
     window.__isAdmin = me.role === 'admin';
     if (window.__isAdmin) { $('users-section').classList.remove('hide'); await loadUsers(); }
   } catch (_) {}
-  await loadShops(); await loadAlerts();
+  await loadShops(); await loadConversations(); await loadAlerts();
   setInterval(loadShops, 15000);
 })();
 </script>

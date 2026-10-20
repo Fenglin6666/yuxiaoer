@@ -231,8 +231,11 @@ order: new → paid → shipped → delivered → done
   ├─ users：data/control/users.json（PBKDF2）
   ├─ supervisor：每店一个 uvicorn 子进程 + 10s 健康检查 + 异常重启
   ├─ scheduler：按 shop_id 计算抖动，PATCH 各店 patrol 擦亮/日报时间
+  ├─ proxy：代理会话列表/详情/人工回复/接管/店主指令/确认项
   └─ aggregator：只读拉取各店 /api/status、/api/alerts、/api/overview
 ```
+
+统一工作台不合并数据库：控制面按 `shop_id` 代理各店现有 `/api/conversations`、`/api/seller/*`，会话和消息仍归属店铺实例。
 
 - 店铺实例 = 独立 `data/shops/<id>/yuxiaoer.db` + 独立端口 + 独立 active 账号；
 - 控制面按 `users.shops` 过滤可见店铺，owner 不能跨店操作；

@@ -56,6 +56,44 @@ class ControlApiTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn("多店控制台", response.text)
 
+    def test_workbench_proxy(self) -> None:
+        with TestClient(app) as client:
+            admin = ("admin", "admin")
+            response = client.post(
+                "/api/control/shops",
+                auth=admin,
+                json={"id": "shop-wb", "name": "工作台店", "port": 8901, "auto_start": False},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+
+            async def fake_request(shop, method, path, json=None):
+                if path.startswith("/api/conversations?") and method == "GET":
+                    return [{"id": "conv_1", "buyer_nick": "买家A", "item_title": "鞋", "last_text": "在吗", "last_at": "2026-10-20T10:00:00Z"}]
+                if path.startswith("/api/conversations/conv_1") and method == "GET":
+                    return {"conversation": {"id": "conv_1"}, "messages": [{"text": "在吗", "direction": "in"}]}
+                if path.endswith("/reply"):
+                    return {"ok": True}
+                if path == "/api/seller/messages":
+                    return {"messages": [], "pending": []}
+                return {"ok": True}
+
+            client.app.state.proxy.request = fake_request
+            response = client.get("/api/control/workbench/conversations?shop_id=shop-wb", auth=admin)
+            self.assertEqual(response.status_code, 200, response.text)
+            conversation = response.json()["conversations"][0]
+            self.assertEqual(conversation["shop_id"], "shop-wb")
+            self.assertEqual(conversation["shop_name"], "工作台店")
+
+            response = client.get("/api/control/workbench/shop-wb/conversations/conv_1", auth=admin)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["messages"][0]["text"], "在吗")
+
+            response = client.post(
+                "/api/control/workbench/shop-wb/conversations/conv_1/reply",
+                auth=admin, json={"text": "在的"},
+            )
+            self.assertEqual(response.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

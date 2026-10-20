@@ -171,7 +171,7 @@ $env:PYTHONPATH = "<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-当前 72 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
+当前 73 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
 
 ## 12. 已知限制
 

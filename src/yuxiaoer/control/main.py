@@ -13,6 +13,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from .aggregator import ShopAggregator
 from .auth import ControlUser, UserRegistry
+from .proxy import ShopProxy
 from .registry import ShopRegistry
 from .scheduler import ShopScheduler
 from .supervisor import ShopSupervisor
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
     app.state.supervisor = ShopSupervisor(app.state.registry)
     app.state.scheduler = ShopScheduler(app.state.registry)
     app.state.aggregator = ShopAggregator()
+    app.state.proxy = ShopProxy()
     app.state.supervisor.start_monitor()
     app.state.scheduler.start()
     if os.getenv("YUXIAOER_CONTROL_AUTOSTART", "1") not in ("0", "false", "off"):
@@ -164,6 +166,101 @@ async def daily(request: Request, user: ControlUser = Depends(current_user)) -> 
         owner=user.username, is_admin=user.role == "admin", allowed=user.shops
     )
     return await request.app.state.aggregator.daily(shops)
+
+
+@app.get("/api/control/workbench/conversations")
+async def workbench_conversations(
+    request: Request, shop_id: str = "", filter: str = "active",
+    user: ControlUser = Depends(current_user),
+) -> dict[str, Any]:
+    if shop_id:
+        shops = [allowed_shop(request, user, shop_id)]
+    else:
+        shops = request.app.state.registry.list(
+            owner=user.username, is_admin=user.role == "admin", allowed=user.shops
+        )
+    rows: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    for shop in shops:
+        try:
+            items = await request.app.state.proxy.conversations(shop, filter)
+            for item in items:
+                item["shop_id"] = shop.id
+                item["shop_name"] = shop.name
+                rows.append(item)
+        except HTTPException as exc:
+            errors.append({"shop_id": shop.id, "error": str(exc.detail)})
+    rows.sort(key=lambda row: row.get("last_at") or "", reverse=True)
+    return {"conversations": rows[:200], "errors": errors}
+
+
+@app.get("/api/control/workbench/{shop_id}/conversations/{conversation_id}")
+async def workbench_conversation(
+    request: Request, shop_id: str, conversation_id: str,
+    user: ControlUser = Depends(current_user),
+) -> dict[str, Any]:
+    shop = allowed_shop(request, user, shop_id)
+    data = await request.app.state.proxy.conversation(shop, conversation_id)
+    data["shop_id"] = shop.id
+    data["shop_name"] = shop.name
+    return data
+
+
+@app.post("/api/control/workbench/{shop_id}/conversations/{conversation_id}/reply")
+async def workbench_reply(
+    request: Request, shop_id: str, conversation_id: str, payload: dict[str, Any],
+    user: ControlUser = Depends(current_user),
+) -> dict[str, Any]:
+    shop = allowed_shop(request, user, shop_id)
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "回复内容不能为空")
+    return await request.app.state.proxy.reply(shop, conversation_id, text[:1000])
+
+
+@app.post("/api/control/workbench/{shop_id}/conversations/{conversation_id}/{action}")
+async def workbench_conversation_action(
+    request: Request, shop_id: str, conversation_id: str, action: str,
+    user: ControlUser = Depends(current_user),
+) -> dict[str, Any]:
+    shop = allowed_shop(request, user, shop_id)
+    if action == "takeover":
+        return await request.app.state.proxy.takeover(shop, conversation_id)
+    if action == "resume":
+        return await request.app.state.proxy.resume(shop, conversation_id)
+    raise HTTPException(400, "未知操作")
+
+
+@app.get("/api/control/workbench/{shop_id}/seller")
+async def workbench_seller(
+    request: Request, shop_id: str, user: ControlUser = Depends(current_user)
+) -> dict[str, Any]:
+    shop = allowed_shop(request, user, shop_id)
+    data = await request.app.state.proxy.seller_messages(shop)
+    data["shop_id"] = shop.id
+    data["shop_name"] = shop.name
+    return data
+
+
+@app.post("/api/control/workbench/{shop_id}/seller")
+async def workbench_seller_send(
+    request: Request, shop_id: str, payload: dict[str, Any],
+    user: ControlUser = Depends(current_user),
+) -> dict[str, Any]:
+    shop = allowed_shop(request, user, shop_id)
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "指令不能为空")
+    return await request.app.state.proxy.seller_send(shop, text[:1000])
+
+
+@app.post("/api/control/workbench/{shop_id}/confirmations/{confirmation_id}/{action}")
+async def workbench_confirm(
+    request: Request, shop_id: str, confirmation_id: str, action: str,
+    user: ControlUser = Depends(current_user),
+) -> dict[str, Any]:
+    shop = allowed_shop(request, user, shop_id)
+    return await request.app.state.proxy.confirm(shop, confirmation_id, action)
 
 
 @app.get("/api/control/users")
