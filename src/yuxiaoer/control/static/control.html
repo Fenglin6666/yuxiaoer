@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>鱼小二 · 多店控制台</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--text:#1f2328;--muted:#667085;--line:#e4e7ec;--ok:#12b76a;--warn:#f79009;--bad:#f04438;--brand:#175cd3}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  header{background:#101828;color:#fff;padding:18px 28px;display:flex;align-items:center;gap:16px}
+  header h1{font-size:18px;margin:0;font-weight:600} header .who{margin-left:auto;color:#cbd5e1;font-size:13px}
+  main{max-width:1280px;margin:24px auto;padding:0 20px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .kpi{font-size:28px;font-weight:700}.muted{color:var(--muted)}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:#f9fafb;color:var(--muted);font-weight:600;font-size:12px}
+  tr:last-child td{border-bottom:0}.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .ok{background:var(--ok)}.bad{background:var(--bad)}.warn{background:var(--warn)}
+  button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px}
+  button:hover{border-color:#98a2b3}button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  button.danger{color:var(--bad)}input,select{border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px;background:#fff}
+  h2{font-size:15px;margin:22px 0 10px}.alert{padding:9px 10px;border-bottom:1px solid var(--line)}.alert:last-child{border-bottom:0}
+  .pill{font-size:11px;padding:2px 7px;border-radius:99px;background:#eef2f6;color:#475467}
+  .err{color:var(--bad);font-size:13px}.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>鱼小二 · 多店控制台</h1>
+  <span class="who" id="who"></span>
+</header>
+<main>
+  <div class="grid">
+    <div class="card"><div class="muted">店铺</div><div class="kpi" id="kpi-shops">-</div></div>
+    <div class="card"><div class="muted">在线</div><div class="kpi" id="kpi-online">-</div></div>
+    <div class="card"><div class="muted">未处理告警</div><div class="kpi" id="kpi-alerts">-</div></div>
+    <div class="card"><div class="muted">控制面</div><div class="kpi" style="font-size:16px;margin-top:8px">运行中</div></div>
+  </div>
+
+  <h2>店铺</h2>
+  <table><thead><tr><th>店铺</th><th>状态</th><th>端口</th><th>负责人</th><th>操作</th></tr></thead>
+    <tbody id="shops"></tbody></table>
+  <div class="err" id="shop-error"></div>
+
+  <h2>新增 / 编辑店铺 <span class="muted" style="font-weight:400">（管理员）</span></h2>
+  <div class="card">
+    <div class="row">
+      <input id="f-id" placeholder="店铺 ID，如 shop-b" style="width:180px">
+      <input id="f-name" placeholder="店铺名称" style="width:180px">
+      <input id="f-port" placeholder="端口，如 8788" style="width:130px">
+      <input id="f-owner" placeholder="负责人用户名" style="width:150px">
+      <input id="f-polish" placeholder="擦亮 HH:MM" value="10:05" style="width:120px">
+      <input id="f-report" placeholder="日报 HH:MM" value="21:00" style="width:120px">
+      <input id="f-sync" placeholder="同步 HH:MM" value="09:00" style="width:120px">
+      <button class="primary" onclick="saveShop()">保存并启动</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label><input type="checkbox" id="f-enabled" checked> 启用</label>
+      <label><input type="checkbox" id="f-autostart" checked> 自动启动</label>
+      <label><input type="checkbox" id="f-autorestart" checked> 崩溃重启</label>
+    </div>
+    <div class="err" id="save-error"></div>
+  </div>
+
+  <h2>汇总</h2>
+  <div class="card row">
+    <button onclick="loadDaily()">刷新日报</button>
+    <button onclick="loadAlerts()">刷新告警</button>
+    <span class="muted" id="daily-hint">日报只汇总各店当天指标，不改动店铺数据。</span>
+  </div>
+  <div id="daily" class="card" style="margin-top:12px"></div>
+  <h2>告警</h2>
+  <div id="alerts" class="card"></div>
+
+  <section id="users-section" class="hide">
+    <h2>控制台账号 <span class="muted" style="font-weight:400">（管理员）</span></h2>
+    <div class="card">
+      <div class="row">
+        <input id="u-name" placeholder="用户名" style="width:140px">
+        <input id="u-pass" type="password" placeholder="密码（编辑可留空）" style="width:170px">
+        <select id="u-role"><option value="owner">owner</option><option value="admin">admin</option></select>
+        <input id="u-shops" placeholder="店铺 ID，逗号分隔；admin 填 *" style="width:260px">
+        <button class="primary" onclick="saveUser()">保存账号</button>
+      </div>
+      <div class="err" id="user-error"></div>
+      <div id="users" style="margin-top:10px"></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...options});
+  if (response.status === 401) { $('shop-error').textContent = '登录已失效，请刷新页面'; throw new Error('401'); }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+  return data;
+}
+
+function statusDot(shop) {
+  if (!shop.running) return '<span class="dot bad"></span>停止';
+  if (shop.health && shop.health.online) return '<span class="dot ok"></span>在线';
+  return '<span class="dot warn"></span>启动中/异常';
+}
+
+async function loadShops() {
+  const data = await api('/api/control/shops');
+  $('kpi-shops').textContent = data.shops.length;
+  $('kpi-online').textContent = data.shops.filter(s => s.health && s.health.online).length;
+  $('shops').innerHTML = data.shops.map(s => `
+    <tr>
+      <td><b>${esc(s.name)}</b><div class="muted">${esc(s.id)}</div></td>
+      <td>${statusDot(s)}<div class="muted">${s.restarts ? `重启 ${s.restarts} 次` : ''} ${esc(s.last_error || '')}</div></td>
+      <td>${s.port}</td>
+      <td>${esc(s.owner)}</td>
+      <td class="row">
+        <button onclick="action('${esc(s.id)}','start')">启动</button>
+        <button onclick="action('${esc(s.id)}','stop')">停止</button>
+        <button onclick="action('${esc(s.id)}','restart')">重启</button>
+        <button onclick="action('${esc(s.id)}','sync')">同步</button>
+        <button onclick="action('${esc(s.id)}','schedule')">排期</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="5" class="muted">还没有店铺</td></tr>';
+}
+
+async function action(id, action) {
+  $('shop-error').textContent = '';
+  try {
+    const data = await api(`/api/control/shops/${encodeURIComponent(id)}/${action}`, {method: 'POST', body: '{}'});
+    if (data && data.ok === false) $('shop-error').textContent = data.error || '操作失败';
+  } catch (err) { $('shop-error').textContent = err.message; }
+  await loadShops();
+}
+
+async function saveShop() {
+  $('save-error').textContent = '';
+  const payload = {
+    id: $('f-id').value.trim(), name: $('f-name').value.trim(),
+    port: Number($('f-port').value || 0), owner: $('f-owner').value.trim() || 'admin',
+    polish_time: $('f-polish').value || '10:05',
+    daily_report_time: $('f-report').value || '21:00',
+    sync_time: $('f-sync').value || '09:00',
+    enabled: $('f-enabled').checked, auto_start: $('f-autostart').checked,
+    auto_restart: $('f-autorestart').checked,
+  };
+  try { await api('/api/control/shops', {method: 'POST', body: JSON.stringify(payload)}); await loadShops(); }
+  catch (err) { $('save-error').textContent = err.message; }
+}
+
+async function loadAlerts() {
+  try {
+    const data = await api('/api/control/alerts');
+    $('kpi-alerts').textContent = data.alerts.length;
+    $('alerts').innerHTML = data.alerts.map(a => `
+      <div class="alert"><span class="pill">${esc(a.shop_name || a.shop_id)}</span>
+      <b>${esc(a.level || '')}</b> ${esc(a.title || '')}
+      <div class="muted">${esc(a.message || a.detail || '')}</div></div>`).join('') || '<div class="muted">没有未处理告警</div>';
+  } catch (err) { $('alerts').innerHTML = `<div class="err">${esc(err.message)}</div>`; }
+}
+
+async function loadDaily() {
+  $('daily').innerHTML = '<div class="muted">加载中…</div>';
+  try {
+    const data = await api('/api/control/daily');
+    $('daily').innerHTML = data.shops.map(s => `
+      <div class="alert"><b>${esc(s.shop_name)}</b> <span class="muted">${esc(s.shop_id)}</span>
+      <pre style="white-space:pre-wrap;margin:6px 0 0">${esc(JSON.stringify(s.today || {}, null, 2))}</pre>
+      ${s.error ? `<div class="err">${esc(s.error)}</div>` : ''}</div>`).join('') || '<div class="muted">没有店铺</div>';
+  } catch (err) { $('daily').innerHTML = `<div class="err">${esc(err.message)}</div>`; }
+}
+
+async function loadUsers() {
+  if (!window.__isAdmin) return;
+  const data = await api('/api/control/users');
+  $('users').innerHTML = data.users.map(u => `
+    <div class="alert"><b>${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span>
+    <span class="muted">${esc((u.shops || []).join(', '))}</span></div>`).join('');
+}
+
+async function saveUser() {
+  $('user-error').textContent = '';
+  const shops = $('u-shops').value.split(',').map(x => x.trim()).filter(Boolean);
+  try {
+    await api('/api/control/users', {method: 'POST', body: JSON.stringify({
+      username: $('u-name').value.trim(), password: $('u-pass').value,
+      role: $('u-role').value, shops,
+    })});
+    $('u-pass').value = '';
+    await loadUsers();
+  } catch (err) { $('user-error').textContent = err.message; }
+}
+
+(async () => {
+  try {
+    const me = await api('/api/control/me');
+    $('who').textContent = `${me.username} · ${me.role}`;
+    window.__isAdmin = me.role === 'admin';
+    if (window.__isAdmin) { $('users-section').classList.remove('hide'); await loadUsers(); }
+  } catch (_) {}
+  await loadShops(); await loadAlerts();
+  setInterval(loadShops, 15000);
+})();
+</script>
+</body>
+</html>

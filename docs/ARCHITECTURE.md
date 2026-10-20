@@ -217,8 +217,26 @@ order: new → paid → shipped → delivered → done
 ## 12. 已知限制
 
 1. 默认只监听 `127.0.0.1`；可选 Basic Auth，不是完整账号体系。
-2. 单店主、单进程、单 SQLite；不支持多租户与水平扩展。
+2. 单店仍是单进程、单 SQLite；多店通过“一店一实例 + 控制面”扩展，不做共享进程多租户。
 3. 买家 → 卖家仍有 4 个窄接口依赖（告警 / 确认 / 消息），已收口到 Protocol。
 4. 真实 WS / 订单 / 发布仍需测试账号现场验证；单测覆盖的是规则与协议帧。
 5. 事件处理器失败只标 failed + 告警，没有自动重试队列（启动时重放）。
 6. 评测集为空时，`/api/eval/run` 返回 0/0。
+
+## 13. 多店控制面
+
+```text
+控制面 :8790
+  ├─ registry：data/control/shops.json
+  ├─ users：data/control/users.json（PBKDF2）
+  ├─ supervisor：每店一个 uvicorn 子进程 + 10s 健康检查 + 异常重启
+  ├─ scheduler：按 shop_id 计算抖动，PATCH 各店 patrol 擦亮/日报时间
+  └─ aggregator：只读拉取各店 /api/status、/api/alerts、/api/overview
+```
+
+- 店铺实例 = 独立 `data/shops/<id>/yuxiaoer.db` + 独立端口 + 独立 active 账号；
+- 控制面按 `users.shops` 过滤可见店铺，owner 不能跨店操作；
+- 控制面只管理自己启动的进程；手工实例需先停，避免端口冲突；
+- 控制面自身不是系统服务，机器重启后需重新拉起。
+
+
