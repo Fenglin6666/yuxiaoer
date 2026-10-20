@@ -3,16 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0d2b24" />
-  <title>鱼小二 · 托管客服</title>
+  <meta name="theme-color" content="#f3f5f8" />
+  <title>鱼小二 · 多账号托管</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css" />
-  <style>
-    .account-bar{display:flex;align-items:center;gap:6px;margin:0 14px 12px;padding:8px 9px;border:1px solid rgba(255,255,255,.10);border-radius:10px;background:rgba(255,255,255,.04)}
-    .account-bar .account-label{font-size:10px;color:rgba(255,255,255,.45);white-space:nowrap}
-    .account-bar select{flex:1;min-width:0;background:rgba(0,0,0,.18);color:#eaf4ef;border:1px solid rgba(255,255,255,.12);border-radius:7px;padding:5px 6px;font-size:11px}
-    .account-bar .icon-btn{width:26px;height:26px;flex:0 0 26px}
-  </style>
+  <link rel="stylesheet" href="/static/styles/pearl.css" />
 </head>
 <body>
   <div class="app" id="app">
@@ -21,14 +16,14 @@
         <span class="brand-mark" id="brandMark"></span>
         <span class="brand-text">
           <strong>鱼小二</strong>
-          <small>托管客服 · 24h</small>
+          <small>多账号托管 · 24h</small>
         </span>
       </a>
 
       <div class="shop-card" id="shopCard">
         <span class="shop-avatar">小</span>
         <div>
-          <strong id="shopName">我的闲鱼小店</strong>
+          <strong id="shopName">我的闲鱼账号</strong>
           <small><i class="dot" id="sideDot"></i><span id="sideStatus">原生通道未连接</span></small>
         </div>
       </div>
@@ -60,6 +55,9 @@
           <span class="status-chip" id="channelChip"><i class="dot"></i>通道在线</span>
           <span class="status-chip subtle" id="llmChip">规则模式</span>
           <span class="status-chip offline hidden" id="riskChip">风控熔断</span>
+          <button class="icon-btn" id="manageAccountsTop" title="账号管理" aria-label="账号管理">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+          </button>
           <button class="icon-btn" id="alertBtn" title="告警中心" aria-label="告警中心">
             <span id="bellIcon"></span><em id="alertBadge" class="badge hidden">0</em>
           </button>

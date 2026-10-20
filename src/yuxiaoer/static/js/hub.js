@@ -145,6 +145,11 @@ async function startLogin(shopId) {
 
 export async function initHub() {
   const accounts = await loadAccounts();
+  const manage = () => openManager().catch((err) => toast(err.message, 'error'));
+  const manageBtn = $('#manageAccounts');
+  if (manageBtn) manageBtn.onclick = manage;
+  const top = $('#manageAccountsTop');
+  if (top) top.onclick = manage;
   if (!accounts.length) {
     selectAccount(accounts);
     await openManager();
@@ -156,5 +161,4 @@ export async function initHub() {
     localStorage.setItem('yuxiaoer_account', S.accountId);
     location.reload();
   };
-  $('#manageAccounts').onclick = () => openManager().catch((err) => toast(err.message, 'error'));
 }

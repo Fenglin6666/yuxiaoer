@@ -116,6 +116,7 @@ src/yuxiaoer/
   api/           控制台路由（system / conversations / catalog / orders /
                  accounts / notify / ops / settings / seller_chat）
   static/        无构建控制台（js/app.js + js/core.js + js/hub.js + js/pages/）
+                  视觉层：styles/pearl.css（珍珠玻璃设计令牌）
   control/       多账号 hub：注册表、进程守护、API 代理、排期
   runtime.py     单账号实例装配与生命周期
   main.py        单账号实例 FastAPI（由 hub 内部启动）
