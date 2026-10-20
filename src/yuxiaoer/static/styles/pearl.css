@@ -283,6 +283,8 @@ textarea.input { height: auto; padding: 9px 10px; resize: vertical; }
 .ring { --ring-color: var(--brand); background: conic-gradient(var(--ring-color) calc(var(--pct) * 1%), rgba(27, 36, 48, 0.08) 0); }
 
 /* ---------------- 账号标签页 ---------------- */
+.page-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 0 0 auto; margin-bottom: 10px; }
+.page-toolbar .page-accounts { flex: 1; min-width: 0; margin: 0; }
 .page-accounts { margin: -4px 0 12px; min-height: 34px; }
 .account-tabs { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
 .account-tabs::-webkit-scrollbar { display: none; }
@@ -309,7 +311,8 @@ textarea.input { height: auto; padding: 9px 10px; resize: vertical; }
   padding-bottom: 18px;
 }
 .view-inbox .page-head, .view-seller .page-head { flex: 0 0 auto; margin-bottom: 10px; }
-.view-inbox .page-accounts, .view-seller .page-accounts { flex: 0 0 auto; }
+.view-inbox .page-toolbar, .view-seller .page-toolbar { flex: 0 0 auto; }
+.view-inbox .page-accounts, .view-seller .page-accounts { flex: 1 1 auto; min-width: 0; }
 .view-inbox .inbox-shell { flex: 1; height: auto; min-height: 0; }
 .view-seller .seller-wrap { flex: 1; height: auto; min-height: 0; }
 .view-seller .seller-chat { min-height: 0; }

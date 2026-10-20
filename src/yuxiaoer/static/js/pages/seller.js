@@ -9,11 +9,10 @@ import { accountTabsHTML, bindAccountTabs } from '../hub.js';
 export async function pageSeller() {
     clearTimers();
     $('#view').innerHTML = `
-      <div class="page-head">
-        <div><h2>让小二做点什么</h2><p>把图片和描述发给小二，它自动补标题、价格、分类、所在地；确认卡可编辑，改完再上架。</p></div>
+      <div class="page-toolbar">
+        <div class="page-accounts" id="sellerAccounts"></div>
         <div class="btn-row"><button class="btn soft" id="sellerOrders">${icon('orders')} 订单履约</button><button class="btn" id="sellerRefresh">${icon('refresh')} 刷新</button></div>
       </div>
-      <div class="page-accounts" id="sellerAccounts"></div>
       <div class="seller-wrap">
         <div class="seller-chat">
           <div class="seller-head">

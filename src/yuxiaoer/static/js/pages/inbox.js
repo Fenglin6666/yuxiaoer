@@ -12,11 +12,10 @@ import { accountTabsHTML, bindAccountTabs } from '../hub.js';
 export async function pageInbox() {
     clearTimers();
     $('#view').innerHTML = `
-      <div class="page-head">
-        <div><h2>所有会话都在这里</h2><p>中间对话，右侧是 Agent 的上下文与轨迹；你可以随时接管。</p></div>
+      <div class="page-toolbar">
+        <div class="page-accounts" id="inboxAccounts"></div>
         <div class="btn-row"><button class="btn" id="inboxRefresh">${icon('refresh')} 刷新</button></div>
       </div>
-      <div class="page-accounts" id="inboxAccounts"></div>
       <div class="inbox-shell">
         <aside class="conv-pane">
           <div class="conv-pane-head">
