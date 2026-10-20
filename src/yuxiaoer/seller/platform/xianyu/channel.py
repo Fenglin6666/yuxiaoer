@@ -39,6 +39,7 @@ class NativeXianyuChannel(BaseChannel):
         self._last_sync: dict[str, Any] = {}
         self._last_account_sync: dict[str, Any] = {}
         self._last_inbound_at: str | None = None
+        self._diagnostics = {"inbound_empty_text": 0, "inbound_empty_buyer": 0}
 
     def bind(self, runtime: Any) -> None:
         self.runtime = runtime
@@ -170,6 +171,11 @@ class NativeXianyuChannel(BaseChannel):
             return
         text = str(msg.get("text") or "").strip()
         if not text:
+            self._diagnostics["inbound_empty_text"] += 1
+            log.warning(
+                "native inbound dropped: empty text chat=%s buyer=%s kind=%s",
+                msg.get("chat_id"), msg.get("buyer_id"), msg.get("kind"),
+            )
             return
         platform_item_id = msg.get("item_id")
         item_id = None
@@ -180,6 +186,8 @@ class NativeXianyuChannel(BaseChannel):
             item_id = row["id"] if row else await self._ensure_item(str(platform_item_id))
         buyer_id = str(msg.get("buyer_id") or "").strip()
         if not buyer_id:
+            self._diagnostics["inbound_empty_buyer"] += 1
+            log.warning("native inbound dropped: empty buyer_id chat=%s", msg.get("chat_id"))
             return
         external_id = str(msg.get("external_id") or "").strip()
         if not external_id:
@@ -266,6 +274,8 @@ class NativeXianyuChannel(BaseChannel):
             "order_sync": self._last_sync,
             "account_sync": self._last_account_sync,
             "last_inbound_at": self._last_inbound_at,
+            "ws": self.im.stats() if self.im else None,
+            "inbound": dict(self._diagnostics),
         }
 
     async def sync_orders(self) -> dict[str, Any]:
@@ -414,4 +424,6 @@ class NativeXianyuChannel(BaseChannel):
             "mode": self.name, "label": self.label,
             "online": bool(self.im and self.im.connected),
             "account": (self.account or {}).get("nickname"),
+            "ws": self.im.stats() if self.im else None,
+            "inbound": dict(self._diagnostics),
         }

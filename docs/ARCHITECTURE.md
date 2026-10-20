@@ -90,7 +90,7 @@ WS /s/vulcan
        商品：platform_item_id → 本地 item_id，缺失则建占位商品
        去重：messageId，缺失则 sha1(chat_id + ts + text)
   → IngestService
-       ensure_conversation → add_inbound → 合并窗口（默认 1.5s）
+       ensure_conversation → add_inbound → 合并窗口（默认 1.5s，最长等待 6s）
        处理期间新消息到达 → 处理完再起一轮
   → BuyerAgent
        每会话一把 asyncio.Lock 串行；建 turn → classify → 分支 → 工具
@@ -185,6 +185,8 @@ order: new → paid → shipped → delivered → done
 | WS connect / reconnect | 事件驱动 | 建连、掉线重连 |
 | order-sync | 60s | 拉订单，付款触发自动发货 |
 | heartbeat / history | 15s / 7s | 心跳、历史补拉 |
+
+历史补拉按会话轮转，每个会话有独立游标；一轮没有覆盖全部会话时全局 cutoff 不前进，避免“只看了前 20 个会话”丢掉其余会话。单会话超过 50 条时记 `history_truncated` 告警。
 
 ## 10. 可复用组件
 

@@ -9,15 +9,29 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from yuxiaoer.buyer.conversation.agent import BuyerAgent
+from yuxiaoer.core import config
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.settings_service import SettingsService
 from yuxiaoer.core.util import dumps, iso, loads
 from yuxiaoer.shared.ports import MessagingPort
 
 log = logging.getLogger("yuxiaoer.ingest")
+
+
+def debounce_delay(elapsed: float, window: float, max_hold: float) -> float:
+    """本次还要等多久：不超过 window，也不超过“首条消息起 max_hold”。
+
+    连续消息会不断取消并重建 timer；没有这个上限时，买家持续发消息会把
+    首条消息无限期压住（turn.latency 里表现为几十秒的 pre-agent 延迟）。
+    """
+    window = max(0.0, window)
+    if max_hold <= 0:
+        return window
+    return max(0.0, min(window, max_hold - max(0.0, elapsed)))
 
 
 class IngestService:
@@ -33,6 +47,7 @@ class IngestService:
         self.buyer = buyer
         self.settings = settings
         self._timers: dict[str, asyncio.Task] = {}
+        self._burst_started: dict[str, float] = {}
         self._processing: set[str] = set()
         self._stopped = False
         self.processed_turns = 0
@@ -72,6 +87,7 @@ class IngestService:
     def _schedule(self, conversation_id: str) -> None:
         if self._stopped:
             return
+        self._burst_started.setdefault(conversation_id, time.monotonic())
         existing = self._timers.get(conversation_id)
         if existing and not existing.done():
             existing.cancel()
@@ -81,7 +97,12 @@ class IngestService:
     async def _run_later(self, conversation_id: str) -> None:
         try:
             window = await self.settings.get_float("merge_window_seconds", 1.5)
-            await asyncio.sleep(max(0.0, window))
+            max_hold = await self.settings.get_float(
+                "merge_max_seconds", config.MERGE_MAX_SECONDS
+            )
+            started = self._burst_started.get(conversation_id)
+            elapsed = time.monotonic() - started if started is not None else 0.0
+            await asyncio.sleep(debounce_delay(elapsed, window, max_hold))
         except asyncio.CancelledError:
             return
         if conversation_id in self._processing:
@@ -95,6 +116,7 @@ class IngestService:
             log.exception("ingest processing failed")
         finally:
             self._processing.discard(conversation_id)
+            self._burst_started.pop(conversation_id, None)
         pending = await self.messaging.pending_inbound(conversation_id)
         if pending:
             self._schedule(conversation_id)
@@ -113,6 +135,7 @@ class IngestService:
         for task in list(self._timers.values()):
             task.cancel()
         self._timers.clear()
+        self._burst_started.clear()
         # 如果某个会话已经在处理，等它结束，避免调用方读到半成品
         for _ in range(200):
             if not self._processing:
@@ -139,15 +162,18 @@ class IngestService:
         for task in self._timers.values():
             task.cancel()
         self._timers.clear()
+        self._burst_started.clear()
 
     def cancel_pending(self) -> None:
         for task in self._timers.values():
             task.cancel()
         self._timers.clear()
+        self._burst_started.clear()
 
     def stats(self) -> dict[str, Any]:
         return {
             "timers": len(self._timers),
             "processing": len(self._processing),
+            "bursts": len(self._burst_started),
             "processed_turns": self.processed_turns,
         }

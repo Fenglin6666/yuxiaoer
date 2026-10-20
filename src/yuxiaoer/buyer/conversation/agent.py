@@ -93,6 +93,7 @@ class BuyerAgent:
         turn_id = new_id("turn")
         session_id = conv["session_id"]
         started = iso()
+        turn_started = now_utc()
         await self.db.execute(
             "INSERT INTO turns(id,conversation_id,session_id,status,started_at) VALUES(?,?,?,?,?)",
             (turn_id, conversation_id, session_id, "processing", started),
@@ -159,6 +160,13 @@ class BuyerAgent:
 
             await self.messaging.mark_processed([m["id"] for m in pending])
             latency_ms = int((now_utc() - parse_iso(first_at)).total_seconds() * 1000)
+            # 把延迟拆成“排队（含 debounce/上一轮）”和“本 turn 处理”，避免把两者混在一起。
+            queue_ms = int((turn_started - parse_iso(first_at)).total_seconds() * 1000)
+            processing_ms = int((now_utc() - turn_started).total_seconds() * 1000)
+            log.info(
+                "buyer turn %s conv=%s pending=%s queue_ms=%s processing_ms=%s handoff=%s",
+                turn_id, conversation_id, len(pending), queue_ms, processing_ms, result.handoff,
+            )
             await self._finish_turn(
                 turn_id, decision, result, latency_ms, steps=toolbox.steps,
                 status="done", reply=result.text, handoff=result.handoff,

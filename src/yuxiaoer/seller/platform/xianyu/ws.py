@@ -35,6 +35,21 @@ IM_UA = (
     "IMPaaS DingWeb/2.1.5"
 )
 
+# 历史补拉上限：会话列表、单轮最多处理会话数、单会话消息数。
+# 超过这些上限时本轮标记为“未完成”，全局 cutoff 不前进，下一轮继续。
+HISTORY_CONV_LIMIT = 50
+HISTORY_MAX_CONVS_PER_TICK = 20
+HISTORY_MSG_LIMIT = 50
+
+
+def rotate_batch(items: list[Any], offset: int, limit: int) -> tuple[list[Any], int]:
+    """从 offset 开始取一批并返回下一个偏移；到尾部就回到 0，不重复取。"""
+    if not items:
+        return [], 0
+    offset %= len(items)
+    batch = items[offset:offset + limit]
+    return batch, (offset + len(batch)) % len(items)
+
 
 def _decode_data(raw: Any) -> Any:
     if isinstance(raw, dict):
@@ -147,7 +162,7 @@ def _extract_item_id(content: Any, info: dict[str, Any]) -> str | None:
     return None
 
 
-def _iter_messages(payload: dict[str, Any]):
+def _iter_messages(payload: dict[str, Any], stats: dict[str, int] | None = None):
     """把 LWP 业务包归一化为内部消息；一帧可包含多条。"""
     body = payload.get("body")
     packets: list[Any] = []
@@ -211,11 +226,16 @@ def _iter_messages(payload: dict[str, Any]):
         if not message_id and isinstance(info, dict):
             message_id = info.get("bizTag")
         if not chat_id:
+            if stats is not None:
+                stats["no_chat"] = stats.get("no_chat", 0) + 1
             continue
         chat_id = str(chat_id).replace("@goofish", "")
         buyer_id = str(info.get("senderUserId") or "") if isinstance(info, dict) else ""
         nick = str(info.get("senderNick") or "闲鱼买家") if isinstance(info, dict) else "闲鱼买家"
         if not buyer_id:
+            if stats is not None:
+                stats["no_buyer"] = stats.get("no_buyer", 0) + 1
+            log.warning("xianyu drop message: empty buyer_id chat=%s", chat_id)
             continue
         yield {
             "kind": kind,
@@ -230,8 +250,8 @@ def _iter_messages(payload: dict[str, Any]):
         }
 
 
-def normalize_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    return list(_iter_messages(payload))
+def normalize_messages(payload: dict[str, Any], stats: dict[str, int] | None = None) -> list[dict[str, Any]]:
+    return list(_iter_messages(payload, stats))
 
 
 def normalize_message(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -271,6 +291,24 @@ class XianyuIM:
         self._stop = asyncio.Event()
         self._raw_seen = 0
         self.registered = False
+        # 诊断计数：让“推了包但没消息”可观测，而不是静默丢弃。
+        self.diagnostics: dict[str, int] = {
+            "connects": 0,
+            "reconnects": 0,
+            "packets": 0,
+            "messages": 0,
+            "raw_decode_fail": 0,
+            "no_chat": 0,
+            "no_buyer": 0,
+            "history_polls": 0,
+            "history_truncated": 0,
+            "history_none": 0,
+        }
+        self.last_disconnect_reason = ""
+        self.connected_at: float | None = None
+        self._history_offset = 0
+        self._history_cutoffs: dict[str, int] = {}
+        self._history_truncated_at: dict[str, int] = {}
 
     def _state(self, state: str) -> None:
         if not self.on_state:
@@ -281,6 +319,15 @@ class XianyuIM:
                 asyncio.create_task(result)
         except Exception:
             log.exception("ws state callback failed")
+
+    def stats(self) -> dict[str, Any]:
+        return {
+            "connected": self.connected,
+            "registered": self.registered,
+            "last_heartbeat": self.last_heartbeat,
+            "last_disconnect_reason": self.last_disconnect_reason,
+            **self.diagnostics,
+        }
 
     async def start(self) -> None:
         if self.running:
@@ -318,28 +365,33 @@ class XianyuIM:
         self._state("disconnected")
 
     async def _history_loop(self) -> None:
-        """推送不可靠时的兜底：轮询最近会话/消息，交给同一条入站链路。"""
+        """推送不可靠时的兜底：轮询最近会话/消息，交给同一条入站链路。
+
+        只有完整轮完一轮会话列表，才把全局 cutoff 前移；否则保留旧 cutoff，
+        下一轮从未覆盖的会话继续补，避免“本轮只看了前 20 个会话”把其余会话丢掉。
+        """
         await asyncio.sleep(4)
         cutoff = int(time.time() * 1000) - 10 * 60 * 1000
         while self.running and not self._stop.is_set():
             if self.connected and self.on_message:
                 try:
-                    await self._poll_history(cutoff)
-                    cutoff = int(time.time() * 1000) - 5 * 60 * 1000
+                    complete = await self._poll_history(cutoff)
+                    if complete:
+                        cutoff = int(time.time() * 1000) - 5 * 60 * 1000
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001
                     log.warning("xianyu history poll failed: %s", str(exc)[:160])
             await asyncio.sleep(7)
 
-    async def get_conversations(self, limit: int = 20) -> dict[str, Any]:
+    async def get_conversations(self, limit: int = HISTORY_CONV_LIMIT) -> dict[str, Any]:
         response = await self.request_lwp(
             "/r/Conversation/listNewestPagination",
             [9007199254740991, limit], timeout=15,
         )
         return response.get("body") if isinstance(response, dict) else {}
 
-    async def get_messages(self, cid: str, limit: int = 20) -> dict[str, Any]:
+    async def get_messages(self, cid: str, limit: int = HISTORY_MSG_LIMIT) -> dict[str, Any]:
         full_cid = cid if cid.endswith("@goofish") else f"{cid}@goofish"
         response = await self.request_lwp(
             "/r/MessageManager/listUserMessages",
@@ -347,22 +399,32 @@ class XianyuIM:
         )
         return response.get("body") if isinstance(response, dict) else {}
 
-    async def _poll_history(self, cutoff: int) -> None:
+    async def _poll_history(self, cutoff: int) -> bool:
         # 推送解析失败时也会触发一次立即补偿；并发轮询直接跳过，避免打爆 IM 接口。
         if self._history_lock.locked():
-            return
+            return False
         async with self._history_lock:
-            await self._poll_history_locked(cutoff)
+            return await self._poll_history_locked(cutoff)
 
-    async def _poll_history_locked(self, cutoff: int) -> None:
-        body = await self.get_conversations()
+    async def _poll_history_locked(self, cutoff: int) -> bool:
+        try:
+            body = await self.get_conversations(HISTORY_CONV_LIMIT)
+        except Exception:
+            # 平台若限制 limit，回落到旧上限，避免整个补拉循环失效。
+            body = await self.get_conversations(20)
         if not isinstance(body, dict):
-            return
+            return False
         convs = body.get("userConvs") or []
-        if convs:
-            log.debug("xianyu history poll: %s conversations", len(convs))
+        if not isinstance(convs, list) or not convs:
+            return True
+
+        batch, self._history_offset = rotate_batch(
+            convs, self._history_offset, HISTORY_MAX_CONVS_PER_TICK
+        )
+        self.diagnostics["history_polls"] = self.diagnostics.get("history_polls", 0) + 1
         polled = 0
-        for item in convs[:20]:
+        truncated = False
+        for item in batch:
             if not isinstance(item, dict):
                 continue
             conv = item.get("singleChatUserConversation") if isinstance(item.get("singleChatUserConversation"), dict) else item
@@ -374,9 +436,16 @@ class XianyuIM:
             modify = int(conv.get("modifyTime") or 0)
             if 0 < modify < 10_000_000_000:
                 modify *= 1000
-            if unread <= 0 and (not modify or modify < cutoff):
+            # 每个会话有自己的补拉游标：全局 cutoff 前进后，没轮到的会话仍能从旧位置补。
+            conv_cutoff = max(cutoff, self._history_cutoffs.get(cid, 0))
+            if unread <= 0 and (not modify or modify < conv_cutoff):
                 continue
-            messages = await self.get_messages(cid)
+            # 以“发起请求的时刻”作为下次游标，避免把请求期间新到的消息跳过。
+            fetch_started = int(time.time() * 1000)
+            try:
+                messages = await self.get_messages(cid, HISTORY_MSG_LIMIT)
+            except Exception:
+                messages = await self.get_messages(cid, 20)
             polled += 1
             models = messages.get("userMessageModels") if isinstance(messages, dict) else []
             if isinstance(models, str):
@@ -384,6 +453,17 @@ class XianyuIM:
                     models = json.loads(models)
                 except Exception:
                     models = []
+            if isinstance(models, list) and len(models) >= HISTORY_MSG_LIMIT:
+                # 单会话一次只能取最近 N 条；更早的消息无法靠这个接口翻页，至少留下痕迹。
+                truncated = True
+                self.diagnostics["history_truncated"] += 1
+                now_ms = int(time.time() * 1000)
+                if now_ms - self._history_truncated_at.get(cid, 0) > 5 * 60 * 1000:
+                    self._history_truncated_at[cid] = now_ms
+                    log.warning(
+                        "xianyu history truncated: cid=%s limit=%s cutoff=%s",
+                        cid, HISTORY_MSG_LIMIT, conv_cutoff,
+                    )
             extension = inner.get("extension") if isinstance(inner.get("extension"), dict) else {}
             if isinstance(inner.get("extension"), str):
                 try:
@@ -397,17 +477,34 @@ class XianyuIM:
                 if not msg:
                     continue
                 ts = int(msg.pop("_ts", 0) or 0)
-                if ts and ts < cutoff:
+                if ts and ts < conv_cutoff:
                     continue
                 try:
                     await self.on_message(msg)
                 except Exception:
                     log.exception("xianyu history message failed")
-            if polled >= 8:
+            self._history_cutoffs[cid] = fetch_started
+            if polled >= HISTORY_MAX_CONVS_PER_TICK:
                 break
+
+        if polled == 0:
+            # 没有需要补的会话，视为完整，允许全局 cutoff 前进。
+            self._history_offset = 0
+        complete = (
+            not truncated
+            and self._history_offset == 0
+            and len(convs) < HISTORY_CONV_LIMIT
+        )
+        log.debug(
+            "xianyu history poll: %s/%s conversations, offset=%s complete=%s",
+            polled, len(convs), self._history_offset, complete,
+        )
+        return complete
 
     def _history_message(self, model: Any, cid: str, conv_extension: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(model, dict):
+            self.diagnostics["history_none"] += 1
+            log.debug("xianyu history skip: non-dict model cid=%s", cid)
             return None
         message = model.get("message") if isinstance(model.get("message"), dict) else model
         extension = message.get("extension") if isinstance(message.get("extension"), dict) else {}
@@ -469,6 +566,8 @@ class XianyuIM:
                 ) as ws:
                     self.ws = ws
                     self.connected = True
+                    self.connected_at = time.time()
+                    self.diagnostics["connects"] += 1
                     self._state("connected")
                     await self._register(ws)
                     backoff = 2
@@ -478,7 +577,12 @@ class XianyuIM:
             except asyncio.CancelledError:
                 break
             except Exception as exc:
-                log.warning("xianyu ws disconnected: %s", str(exc)[:180])
+                self.last_disconnect_reason = str(exc)[:200]
+                self.diagnostics["reconnects"] += 1
+                log.warning(
+                    "xianyu ws disconnected (reconnects=%s): %s",
+                    self.diagnostics["reconnects"], str(exc)[:180],
+                )
             finally:
                 self.connected = False
                 self.ws = None
@@ -573,6 +677,8 @@ class XianyuIM:
         try:
             payload = json.loads(raw)
         except Exception:
+            self.diagnostics["raw_decode_fail"] += 1
+            log.warning("xianyu raw decode failed: %s", str(raw)[:160])
             return
         headers = payload.get("headers") if isinstance(payload, dict) else None
         mid = str(headers.get("mid") or "") if isinstance(headers, dict) else ""
@@ -599,11 +705,13 @@ class XianyuIM:
                 await self._send_json(ack)
             except Exception:
                 pass
-        messages = normalize_messages(payload)
+        messages = normalize_messages(payload, self.diagnostics)
+        self.diagnostics["messages"] += len(messages)
         body = payload.get("body") if isinstance(payload, dict) else None
         if isinstance(body, dict) and isinstance(body.get("syncPushPackage"), dict):
             data = body["syncPushPackage"].get("data") or []
             if data:
+                self.diagnostics["packets"] += len(data)
                 log.info("xianyu sync push: %s packets, normalized=%s", len(data), len(messages))
                 log.debug("xianyu sync raw: %s", str(raw)[:4000])
                 if not messages and self.on_message:

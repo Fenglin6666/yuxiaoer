@@ -132,7 +132,7 @@ YUXIAOER_CONSOLE_PASSWORD=change-me
 ## 10. 日志与诊断
 
 - 设置页「复制诊断」；
-- `GET /api/status`：channel / risk / session / queue / outbox；
+- `GET /api/status`：channel / risk / session / queue / outbox；`channel.ws` 里有连接/重连、包/消息、raw 解析失败、`no_chat` / `no_buyer`、历史截断计数，`channel.inbound` 是入站空文本/空 buyer 计数；
 - `GET /api/events`、`GET /api/tools`；
 - 回放：`GET /api/replay/sessions` + `/api/replay/{conversation_id}`；
 - 失败事件 `events.status=failed`，同时产生 P1 告警。
@@ -144,7 +144,7 @@ $env:PYTHONPATH = "<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-当前 33 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
+当前 44 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
 
 ## 12. 已知限制
 

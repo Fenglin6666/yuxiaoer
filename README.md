@@ -109,7 +109,7 @@ src/yuxiaoer/
   static/        无构建控制台（js/app.js + js/core.js + js/pages/）
   runtime.py     服务装配与生命周期
   main.py        FastAPI 入口
-tests/           33 个单元测试
+tests/           44 个单元测试
 docs/            架构、协议、外部接口
 RUNBOOK.md       运维手册
 ```
@@ -129,6 +129,7 @@ RUNBOOK.md       运维手册
 | `XY_ORDER_SYNC_SECONDS` | `60` | 订单同步周期 |
 | `AMAP_KEY` | 空 | 可选；不配时用内置城市坐标兜底 |
 | `MERGE_WINDOW_SECONDS` | `1.5` | 买家消息合并窗口 |
+| `MERGE_MAX_SECONDS` | `6` | 连续消息不断重置合并窗口时的最大等待上限 |
 | `LLM_ENABLED` | `off` | 可选 LLM；关闭时纯规则模式 |
 | 通知 env | 空 | 见 `.env.example` |
 
@@ -139,7 +140,7 @@ $env:PYTHONPATH="<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-当前 33 个测试，覆盖规则分类、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
+当前 44 个测试，覆盖规则分类、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手、合并窗口上限与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
 
 ## 8. 外部接口
 
