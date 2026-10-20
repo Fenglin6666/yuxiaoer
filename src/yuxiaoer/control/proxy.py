@@ -42,32 +42,19 @@ class ShopProxy:
         except ValueError:
             return {"ok": True}
 
-    async def conversations(self, shop: Shop, filter_: str = "active") -> list[dict[str, Any]]:
-        data = await self.request(shop, "GET", f"/api/conversations?filter={filter_}")
-        return data if isinstance(data, list) else []
-
-    async def conversation(self, shop: Shop, conversation_id: str) -> dict[str, Any]:
-        data = await self.request(shop, "GET", f"/api/conversations/{conversation_id}")
-        return data if isinstance(data, dict) else {}
-
-    async def reply(self, shop: Shop, conversation_id: str, text: str) -> dict[str, Any]:
-        return await self.request(
-            shop, "POST", f"/api/conversations/{conversation_id}/reply", {"text": text}
-        )
-
-    async def takeover(self, shop: Shop, conversation_id: str) -> dict[str, Any]:
-        return await self.request(shop, "POST", f"/api/conversations/{conversation_id}/takeover")
-
-    async def resume(self, shop: Shop, conversation_id: str) -> dict[str, Any]:
-        return await self.request(shop, "POST", f"/api/conversations/{conversation_id}/resume")
-
-    async def seller_messages(self, shop: Shop) -> dict[str, Any]:
-        data = await self.request(shop, "GET", "/api/seller/messages")
-        return data if isinstance(data, dict) else {}
-
-    async def seller_send(self, shop: Shop, text: str) -> dict[str, Any]:
-        data = await self.request(shop, "POST", "/api/seller/message", {"text": text})
-        return data if isinstance(data, dict) else {}
+    async def forward(
+        self, shop: Shop, method: str, path: str, *,
+        params: Any = None, content: bytes | None = None, headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url(shop), auth=shop_auth(), timeout=60.0
+            ) as client:
+                return await client.request(
+                    method, path, params=params, content=content, headers=headers
+                )
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, f"账号实例 {shop.id} 不可达：{exc}") from exc
 
     async def status(self, shop: Shop) -> dict[str, Any]:
         data = await self.request(shop, "GET", "/api/status")
@@ -91,12 +78,4 @@ class ShopProxy:
 
     async def sync_account(self, shop: Shop, account_id: str) -> dict[str, Any]:
         data = await self.request(shop, "POST", f"/api/accounts/{account_id}/sync", {})
-        return data if isinstance(data, dict) else {}
-
-    async def confirm(self, shop: Shop, confirmation_id: str, action: str) -> dict[str, Any]:
-        if action not in ("confirm", "cancel"):
-            raise HTTPException(400, "未知确认操作")
-        data = await self.request(
-            shop, "POST", f"/api/confirmations/{confirmation_id}/{action}"
-        )
         return data if isinstance(data, dict) else {}

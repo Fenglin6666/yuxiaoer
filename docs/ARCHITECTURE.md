@@ -16,7 +16,7 @@
 
 | 维度 | 事实 |
 |---|---|
-| 进程 | 单进程 uvicorn + FastAPI，默认 `127.0.0.1:8787` |
+| 进程 | 8787 hub + 每个闲鱼账号一个 8801+ uvicorn 实例 |
 | 并发 | 纯 asyncio；没有 Celery / Redis / MQ |
 | 存储 | 单文件 SQLite（WAL），一条 aiosqlite 连接；写操作由 `asyncio.Lock` 串行 |
 | 调度 | 若干 `asyncio.create_task` 常驻循环，没有独立调度器 |
@@ -39,6 +39,8 @@ DB 连接 → 迁移 → 事件总线 → 设置 / 写队列 / 通道
 main.py
   └─ runtime.py（唯一装配点）
        ├─ api/          控制台路由（按领域拆 9 个模块）
+├─ static/       现有 Web（账号切换器在侧边栏，账号实例内部端口 8801+）
+├─ control/      8787 hub：注册表、进程守护、按账号代理 /api/*、排期
        ├─ seller/       卖家域：账号、商品、订单、发货、通知、平台协议
        ├─ buyer/        买家域：消息理解、议价、回复
        ├─ shared/       跨域组件：知识库、ToolBox、窄接口
@@ -230,11 +232,11 @@ order: new → paid → shipped → delivered → done
   ├─ registry：data/control/accounts.json（账号实例：本地名/端口）
   ├─ supervisor：每个真实闲鱼账号一个 uvicorn 子进程（8801+）+ 10s 健康检查 + 异常重启
   ├─ scheduler：按账号计算抖动，PATCH 各账号 patrol 擦亮/日报时间
-  ├─ proxy：代理扫码登录、会话、人工回复、接管、店主指令、确认项
+  ├─ proxy：把现有 static 前端的 /api/* 转发到当前选中账号；扫码走 hub 账号接口
   └─ aggregator：只读拉取各账号 /api/status、/api/alerts、/api/overview
 ```
 
-统一工作台不合并数据库：控制台按账号实例代理现有 `/api/conversations`、`/api/seller/*`，会话和消息仍归属对应账号。
+现有 static 前端不合并数据库：控制台按账号实例代理现有 `/api/*`，页面、会话和消息仍归属对应账号。
 
 - 账号实例 = 独立 `data/shops/<id>/yuxiaoer.db` + 独立端口 + 独立 active 闲鱼账号；
 - 账号身份来自真实扫码登录，不存在“本地注册店铺”；

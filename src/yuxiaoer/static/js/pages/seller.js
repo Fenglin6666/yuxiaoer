@@ -164,7 +164,8 @@ export function renderSellerSide() {
 export async function uploadSellerImages(files) {
     const fd = new FormData();
     for (const file of files.slice(0, 9)) fd.append('files', file);
-    const response = await fetch('/api/media', { method: 'POST', body: fd });
+    const headers = S.accountId ? { 'X-Account-Id': S.accountId } : {};
+    const response = await fetch('/api/media', { method: 'POST', body: fd, headers });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || '图片上传失败');
     S.seller.images = [...S.seller.images, ...(data.paths || [])].slice(0, 9);

@@ -13,7 +13,8 @@ cd <项目目录>
 
 ```powershell
 $env:PYTHONPATH = "<项目目录>\src"
-.\.venv\Scripts\python.exe -m uvicorn yuxiaoer.main:app --host 127.0.0.1 --port 8787
+$env:YUXIAOER_CONTROL_PORT = "8787"
+.\.venv\Scripts\python.exe -m uvicorn yuxiaoer.control.main:app --host 127.0.0.1 --port 8787
 ```
 
 停止：前台 `Ctrl+C`。后台：
@@ -25,7 +26,7 @@ Get-Process python | Where-Object { $_.Path -like "*yuxiaoer*" } | Stop-Process
 健康检查：
 
 ```powershell
-Invoke-WebRequest http://127.0.0.1:8787/api/health
+Invoke-WebRequest http://127.0.0.1:8787/api/hub/health
 Invoke-WebRequest http://127.0.0.1:8787/api/status
 ```
 
@@ -66,22 +67,24 @@ Invoke-WebRequest http://127.0.0.1:8787/api/status
 
 > 数据库含真实 Cookie / Token，禁止提交仓库或发给第三方。
 
-## 4. 控制台鉴权（可选）
+## 4. 网络与鉴权
 
-默认只监听 `127.0.0.1`。需要局域网 / 公网访问时，在 `.env` 设置：
+8787 默认只监听 `127.0.0.1`，个人本机使用，**没有登录**；不要直接暴露到公网。
+
+账号实例内部端口（8801+）可选 Basic Auth，仅用于调试：
 
 ```dotenv
 YUXIAOER_CONSOLE_USER=owner
 YUXIAOER_CONSOLE_PASSWORD=change-me
 ```
 
-两项都设置后，除 `/api/health` 与 `/api/v1/external/*` 外全部要求 Basic Auth，浏览器会自动弹登录框。公网仍建议再加 HTTPS 与反代鉴权。
+远程访问建议 VPN / 反代加 HTTPS，而不是把 8787 直接映射出去。
 
 ## 5. 常见问题
 
 | 现象 | 处理 |
 |---|---|
-| 端口 8787 占用 | 找 PID 杀掉，或改 `YUXIAOER_PORT` |
+| 端口 8787 占用 | 找 PID 杀掉，或改 `YUXIAOER_CONTROL_PORT` |
 | 页面空白 / 报错 | `Ctrl+F5` 强刷；看浏览器 Console 与 `data/server.err.log` |
 | 账号列表空 | 首次启动正常，先添加账号并扫码 |
 | 扫码失败 | 检查网络 / 代理；`/api/status` 看 `channel.detail`；二维码约 3 分钟过期，重试 |
@@ -158,4 +161,4 @@ $env:PYTHONPATH = "<项目目录>\src"
 
 ## 12. 已知限制
 
-原生发布 / 下架 / 改价 / 擦亮已接 mtop，需用自己的测试账号验证；人脸 / 滑块不自动化；企业微信只做出站；无多租户、向量检索、真实支付退款。控制台默认无鉴权（可选 Basic Auth），公网部署前必须自行加防护。
+原生发布 / 下架 / 改价 / 擦亮已接 mtop，需用自己的测试账号验证；人脸 / 滑块不自动化；企业微信只做出站；无多租户、向量检索、真实支付退款。8787 默认只监听本机、无登录，公网部署前必须自行加防护。

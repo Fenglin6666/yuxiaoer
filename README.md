@@ -1,6 +1,6 @@
 # 鱼小二
 
-> 单店主、单机运行的**闲鱼托管客服 Agent**：扫码登录 → Cookie / IM Token 保活 → WebSocket 实时收发 → 订单同步 → 卡券自动发货。买家侧自动回复，卖家侧用一句话下指令，所有写操作先过确认门。
+> 个人使用的**多闲鱼账号托管客服 Agent**：一个 Web 管理多个真实账号；扫码登录 → Cookie / IM Token 保活 → WebSocket 实时收发 → 订单同步 → 卡券自动发货。买家侧自动回复，卖家侧用一句话下指令，所有写操作先过确认门。
 
 - **单机个人使用**：FastAPI + SQLite + asyncio，无 Redis / MQ / 多租户。
 - **真实通道**：没有 mock 通道、演示账号或种子数据；首次启动就是空库。
@@ -46,15 +46,15 @@ cd <项目目录>
 
 | 地址 | 用途 |
 |---|---|
-| <http://127.0.0.1:8787> | 控制台 |
-| <http://127.0.0.1:8787/docs> | Swagger（外部接口） |
-| <http://127.0.0.1:8787/api/health> | 健康检查 |
+| <http://127.0.0.1:8787> | 多账号 Web 控制台 |
+| <http://127.0.0.1:8787/api/hub/health> | 控制台健康检查 |
+| <http://127.0.0.1:8787/api/status> | 当前选中账号的状态（按 `X-Account-Id` 代理） |
 
 首次启动是空库：
 
-1. 「账号与风控」→ 添加账号 → 扫码登录；手机确认后自动取 IM Token；
-2. 「商品与知识」新增草稿，或等真实订单 / 消息同步后自动生成占位商品；
-3. 商品详情可「发布上架」，或在「让小二做点什么」发图片 + 描述；
+1. 侧边栏「闲鱼账号」选择账号，点 `+` 添加实例；
+2. 在账号管理里点「扫码」，用真实闲鱼账号扫码；手机确认后自动取 IM Token；
+3. 登录成功后自动同步商品；商品详情可「发布上架」，或在「让小二做点什么」发图片 + 描述；
 4. 虚拟商品点「设为虚拟自动发货」并补卡券；
 5. 买家付款后订单同步 → `paid` → 自动占用卡券并发送 → 本地订单变 `shipped`；
 6. 外部系统调用 `/api/v1/external/*` 查询账号 / 订单 / 消息。
@@ -115,9 +115,10 @@ src/yuxiaoer/
     integrations/  外部接口
   api/           控制台路由（system / conversations / catalog / orders /
                  accounts / notify / ops / settings / seller_chat）
-  static/        无构建控制台（js/app.js + js/core.js + js/pages/）
-  runtime.py     服务装配与生命周期
-  main.py        FastAPI 入口
+  static/        无构建控制台（js/app.js + js/core.js + js/hub.js + js/pages/）
+  control/       多账号 hub：注册表、进程守护、API 代理、排期
+  runtime.py     单账号实例装配与生命周期
+  main.py        单账号实例 FastAPI（由 hub 内部启动）
 tests/           70 个单元测试
 docs/            架构、协议、外部接口
 RUNBOOK.md       运维手册
@@ -129,9 +130,9 @@ RUNBOOK.md       运维手册
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `YUXIAOER_PORT` | `8787` | 控制台端口 |
+| `YUXIAOER_CONTROL_PORT` | `8787` | 多账号 Web 入口端口 |
 | `YUXIAOER_PUBLIC_URL` | `http://127.0.0.1:8787` | 邮件确认链接的对外地址 |
-| `YUXIAOER_CONSOLE_USER` / `YUXIAOER_CONSOLE_PASSWORD` | 空 | 可选控制台 Basic Auth；两项都设置才启用 |
+| `YUXIAOER_CONTROL_AUTOSTART` | `1` | 启动时自动拉起已登记账号 |
 | `YUXIAOER_EXTERNAL_SECRET` | `yx-local-secret` | 外部接口共享秘钥，公网必须替换 |
 | `XY_APP_KEY` | `34839810` | mtop appKey |
 | `XY_WS_URL` | `wss://wss-goofish.dingtalk.com/` | IM WebSocket |
@@ -148,7 +149,7 @@ $env:PYTHONPATH="<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-当前 70 个测试，覆盖规则分类、归一化、实体抽取、轻量意图模型、商品索引、多账号数据目录、控制台注册表/排期/工作台代理、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手、入口直投与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
+当前 70 个测试，覆盖规则分类、归一化、实体抽取、轻量意图模型、商品索引、多账号数据目录、控制台注册表/排期/账号切换与 API 代理、议价、中文分词、mtop 签名、WS 解帧、订单字段、通知渠道注册表、指令共享助手、入口直投与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
 
 ## 8. 外部接口
 
@@ -161,7 +162,7 @@ $env:PYTHONPATH="<项目目录>\src"
 3. **不做**自动下单、自动关单、真实支付退款。
 4. 原生 WS 现场收发、发布 / 下架 / 改价 / 擦亮需要用自己的测试账号验证；扫码生成已实测。
 5. 企业微信只做出站 webhook，未做入站。
-6. 控制台默认只监听 `127.0.0.1`；暴露到局域网 / 公网前请设置 Basic Auth 或加反代鉴权。
+6. 控制台默认只监听 `127.0.0.1`，无登录；不要直接暴露到公网。
 7. 外部接口返回订单含收货信息，不要转发第三方。
 
 > **风险提示**：直连平台私有协议可能违反平台用户协议，账号存在被处置风险。请使用测试账号、控制频率，并优先评估官方通道。

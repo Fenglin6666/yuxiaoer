@@ -87,6 +87,7 @@ export function toast(message, type = 'ok') {
 
 export async function api(path, options = {}) {
     const opts = { method: options.method || 'GET', headers: {} };
+    if (S.accountId) opts.headers['X-Account-Id'] = S.accountId;
     if (options.body !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(options.body);
@@ -104,6 +105,7 @@ export async function api(path, options = {}) {
   // ---------------- state ----------------
 export const S = {
     route: 'overview',
+    accountId: localStorage.getItem('yuxiaoer_account') || '',
     system: null,
     alerts: [],
     handoffCount: 0,

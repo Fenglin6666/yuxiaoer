@@ -7,6 +7,12 @@
   <title>鱼小二 · 托管客服</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    .account-bar{display:flex;align-items:center;gap:6px;margin:0 14px 12px;padding:8px 9px;border:1px solid rgba(255,255,255,.10);border-radius:10px;background:rgba(255,255,255,.04)}
+    .account-bar .account-label{font-size:10px;color:rgba(255,255,255,.45);white-space:nowrap}
+    .account-bar select{flex:1;min-width:0;background:rgba(0,0,0,.18);color:#eaf4ef;border:1px solid rgba(255,255,255,.12);border-radius:7px;padding:5px 6px;font-size:11px}
+    .account-bar .icon-btn{width:26px;height:26px;flex:0 0 26px}
+  </style>
 </head>
 <body>
   <div class="app" id="app">
@@ -25,6 +31,12 @@
           <strong id="shopName">我的闲鱼小店</strong>
           <small><i class="dot" id="sideDot"></i><span id="sideStatus">原生通道未连接</span></small>
         </div>
+      </div>
+
+      <div class="account-bar">
+        <span class="account-label">闲鱼账号</span>
+        <select id="accountPicker" aria-label="选择闲鱼账号"></select>
+        <button class="icon-btn" id="manageAccounts" title="管理闲鱼账号" aria-label="管理闲鱼账号">+</button>
       </div>
 
       <nav class="nav" id="nav"></nav>

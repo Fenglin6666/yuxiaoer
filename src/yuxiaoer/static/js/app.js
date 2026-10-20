@@ -1,6 +1,7 @@
 /* 鱼小二控制台 · 入口（原生 ESM，无构建） */
 
 import { $, ROUTE_META, S, clearTimers, closeModal, esc, icon, openAlertCenter, pad, parseRoute, refreshGlobal, renderNav, toast } from './core.js';
+import { initHub } from './hub.js';
 import { pageAccounts } from './pages/accounts.js';
 import { pageCatalog } from './pages/catalog.js';
 import { pageInbox } from './pages/inbox.js';
@@ -47,6 +48,7 @@ import { pageSettings } from './pages/settings.js';
     window.addEventListener('hashchange', renderRoute);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
     renderNav();
+    await initHub();
     await refreshGlobal();
     setInterval(refreshGlobal, 30000);
     renderRoute();
