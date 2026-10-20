@@ -17,7 +17,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(PROJECT_ROOT / ".env")
 
 _DEFAULT_DATA_DIR = PROJECT_ROOT / "data"
-SHOPS_DIR = Path(os.getenv("YUXIAOER_SHOPS_DIR", _DEFAULT_DATA_DIR / "shops"))
+ACCOUNTS_DIR = Path(
+    os.getenv("YUXIAOER_ACCOUNTS_DIR")
+    or os.getenv("YUXIAOER_SHOPS_DIR")
+    or _DEFAULT_DATA_DIR / "shops"
+)
+SHOPS_DIR = ACCOUNTS_DIR
 
 
 def normalize_shop_id(value: str | None) -> str:
@@ -27,20 +32,36 @@ def normalize_shop_id(value: str | None) -> str:
     return cleaned or "default"
 
 
-def shop_data_dir(shop_id: str) -> Path:
-    if shop_id == "default":
+def account_data_dir(account_id: str) -> Path:
+    if account_id == "default":
         return _DEFAULT_DATA_DIR
-    return SHOPS_DIR / shop_id
+    return ACCOUNTS_DIR / account_id
 
 
-SHOP_ID = normalize_shop_id(os.getenv("YUXIAOER_SHOP_ID", "default"))
-if SHOP_ID == "default":
-    DATA_DIR = Path(os.getenv("YUXIAOER_DATA_DIR", shop_data_dir("default")))
+def shop_data_dir(shop_id: str) -> Path:
+    """兼容旧调用。"""
+    return account_data_dir(shop_id)
+
+
+ACCOUNT_ID = normalize_shop_id(
+    os.getenv("YUXIAOER_ACCOUNT_ID") or os.getenv("YUXIAOER_SHOP_ID") or "default"
+)
+SHOP_ID = ACCOUNT_ID
+if ACCOUNT_ID == "default":
+    DATA_DIR = Path(os.getenv("YUXIAOER_DATA_DIR", account_data_dir("default")))
     DB_PATH = Path(os.getenv("YUXIAOER_DB", DATA_DIR / "yuxiaoer.db"))
 else:
-    # 非默认店不能用全局 DATA_DIR/DB 覆盖，否则所有店会写进同一个库。
-    DATA_DIR = Path(os.getenv("YUXIAOER_SHOP_DATA_DIR", shop_data_dir(SHOP_ID)))
-    DB_PATH = Path(os.getenv("YUXIAOER_SHOP_DB", DATA_DIR / "yuxiaoer.db"))
+    # 非默认账号不能用全局 DATA_DIR/DB 覆盖，否则所有账号会写进同一个库。
+    DATA_DIR = Path(
+        os.getenv("YUXIAOER_ACCOUNT_DATA_DIR")
+        or os.getenv("YUXIAOER_SHOP_DATA_DIR")
+        or account_data_dir(ACCOUNT_ID)
+    )
+    DB_PATH = Path(
+        os.getenv("YUXIAOER_ACCOUNT_DB")
+        or os.getenv("YUXIAOER_SHOP_DB")
+        or DATA_DIR / "yuxiaoer.db"
+    )
 
 HOST = os.getenv("YUXIAOER_HOST", "127.0.0.1")
 PORT = int(os.getenv("YUXIAOER_PORT", "8787"))

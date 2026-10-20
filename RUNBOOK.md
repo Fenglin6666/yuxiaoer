@@ -36,8 +36,8 @@ Invoke-WebRequest http://127.0.0.1:8787/api/status
 .\run.ps1
 
 # 新账号：独立端口 + data/shops/<id>/
-.\run.ps1 -ShopId shop-b -Port 8788
-.\run.ps1 -ShopId shop-c -Port 8789
+.\run.ps1 -AccountId acct_2 -Port 8788
+.\run.ps1 -AccountId acct_3 -Port 8789
 ```
 
 每个账号独立扫码、SQLite、写队列、值守任务；不要给多个账号设置同一个 `YUXIAOER_DATA_DIR`。详见 `docs/MULTI-SHOP.md`。
@@ -169,7 +169,7 @@ $env:PYTHONPATH = "<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
 
-当前 69 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
+当前 70 个测试全部通过。升级：拉取新代码 → 停服务 → `uv pip install -r requirements.txt` → 启动；数据库迁移在启动时自动执行。
 
 ## 12. 已知限制
 

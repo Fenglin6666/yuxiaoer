@@ -41,7 +41,6 @@ class ShopAggregator:
             "id": shop.id,
             "name": shop.name,
             "port": shop.port,
-            "owner": shop.owner,
             "status": status,
             "open_alerts": open_alerts,
             "online": not (isinstance(status, dict) and status.get("error")),

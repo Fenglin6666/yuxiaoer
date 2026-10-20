@@ -1,10 +1,13 @@
-# 鱼小二 · 一键启动（单店实例）
+# 鱼小二 · 单账号实例启动
 param(
-    [string]$ShopId = "default",
+    [string]$AccountId = "default",
+    [string]$ShopId = "",
     [int]$Port = 0
 )
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+
+if ($ShopId) { $AccountId = $ShopId }
 
 if (-not (Test-Path ".venv\Scripts\python.exe")) {
     Write-Host "创建虚拟环境..." -ForegroundColor Cyan
@@ -23,17 +26,18 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 }
 
 $env:PYTHONPATH = Join-Path $PSScriptRoot "src"
-$env:YUXIAOER_SHOP_ID = $ShopId
+$env:YUXIAOER_ACCOUNT_ID = $AccountId
+$env:YUXIAOER_SHOP_ID = $AccountId
 if ($Port -gt 0) {
     $env:YUXIAOER_PORT = "$Port"
 } elseif (-not $env:YUXIAOER_PORT) {
     $env:YUXIAOER_PORT = "8787"
 }
 
-$dataLabel = if ($ShopId -eq "default") { "data/" } else { "data/shops/$ShopId/" }
+$dataLabel = if ($AccountId -eq "default") { "data/" } else { "data/shops/$AccountId/" }
 Write-Host ""
 Write-Host "  鱼小二 · 托管客服" -ForegroundColor Green
-Write-Host "  店铺: $ShopId" -ForegroundColor Cyan
+Write-Host "  账号: $AccountId" -ForegroundColor Cyan
 Write-Host "  http://127.0.0.1:$env:YUXIAOER_PORT" -ForegroundColor Cyan
 Write-Host "  通道: 原生闲鱼  ·  数据目录 $dataLabel" -ForegroundColor DarkGray
 Write-Host ""

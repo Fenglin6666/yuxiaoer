@@ -104,7 +104,11 @@ async def login_start(request: Request, shop_id: str) -> dict[str, Any]:
         if not account_id:
             raise HTTPException(502, "创建账号失败")
     else:
-        account_id = accounts[0].get("id")
+        active = next(
+            (item for item in accounts if item.get("status") == "online" or item.get("is_active")),
+            accounts[0],
+        )
+        account_id = active.get("id")
     data = await proxy.login_start(shop, str(account_id))
     return {"ok": True, "account_id": account_id, **data}
 

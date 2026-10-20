@@ -6,7 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from yuxiaoer.control.registry import ShopRegistry
+from yuxiaoer.control.aggregator import ShopAggregator
+from yuxiaoer.control.registry import Shop, ShopRegistry
 from yuxiaoer.control.scheduler import jittered_time
 
 
@@ -46,6 +47,20 @@ class JitterTests(unittest.TestCase):
     def test_accounts_are_staggered(self) -> None:
         times = {jittered_time("10:05", f"acct_{i}") for i in range(8)}
         self.assertGreater(len(times), 1)
+
+
+class AggregatorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_overview_does_not_require_owner(self) -> None:
+        shop = Shop(id="acct_1", name="主号", port=8787)
+        aggregator = ShopAggregator()
+
+        async def fake_get(shop, path):
+            return {"account": {"id": "acc_1"}} if path == "/api/status" else []
+
+        aggregator._get = fake_get  # type: ignore[method-assign]
+        row = await aggregator.shop_overview(shop)
+        self.assertEqual(row["id"], "acct_1")
+        self.assertTrue(row["online"])
 
 
 if __name__ == "__main__":

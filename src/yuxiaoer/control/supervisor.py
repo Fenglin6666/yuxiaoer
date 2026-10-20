@@ -1,4 +1,4 @@
-"""店铺进程守护：启动、健康检查、退出重启。"""
+"""闲鱼账号实例进程守护：启动、健康检查、退出重启。"""
 
 from __future__ import annotations
 
@@ -64,9 +64,11 @@ class ShopSupervisor:
             log_path = self.log_dir / f"{shop.id}.log"
             env = os.environ.copy()
             env["PYTHONPATH"] = str(self.project_root / "src")
+            env["YUXIAOER_ACCOUNT_ID"] = shop.id
             env["YUXIAOER_SHOP_ID"] = shop.id
             env["YUXIAOER_PORT"] = str(shop.port)
-            env["YUXIAOER_SHOPS_DIR"] = str(config.SHOPS_DIR)
+            env["YUXIAOER_ACCOUNTS_DIR"] = str(config.ACCOUNTS_DIR)
+            env["YUXIAOER_SHOPS_DIR"] = str(config.ACCOUNTS_DIR)
             cmd = [
                 sys.executable, "-m", "uvicorn", "yuxiaoer.main:app",
                 "--host", "127.0.0.1", "--port", str(shop.port),

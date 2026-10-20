@@ -104,6 +104,8 @@ class ShopRegistry:
             shop_id = "acct_" + candidate if candidate != "default" else f"acct_{len(self._shops) + 1}"
             if shop_id == "acct_default":
                 shop_id = f"acct_{len(self._shops) + 1}"
+            if not raw_id:
+                current = self._shops.get(shop_id)
         port = int(payload.get("port") or (current.port if current else self.next_port()))
         if not 1 <= port <= 65535:
             raise ValueError("端口必须在 1-65535")

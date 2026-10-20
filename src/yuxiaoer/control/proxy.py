@@ -1,4 +1,4 @@
-"""控制面到店铺实例的 HTTP 代理：会话、人工回复、店主指令、确认项。"""
+"""控制台到闲鱼账号实例的 HTTP 代理：会话、人工回复、店主指令、确认项。"""
 
 from __future__ import annotations
 
@@ -31,10 +31,10 @@ class ShopProxy:
             ) as client:
                 response = await client.request(method, path, json=json)
         except httpx.HTTPError as exc:
-            raise HTTPException(502, f"店铺 {shop.id} 不可达：{exc}") from exc
+            raise HTTPException(502, f"账号实例 {shop.id} 不可达：{exc}") from exc
         if response.status_code >= 400:
             detail = response.text[:300]
-            raise HTTPException(response.status_code, detail or "店铺接口失败")
+            raise HTTPException(response.status_code, detail or "账号接口失败")
         if not response.content:
             return {"ok": True}
         try:
