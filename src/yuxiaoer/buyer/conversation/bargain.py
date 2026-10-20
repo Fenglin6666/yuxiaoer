@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 from yuxiaoer.core.util import yuan
 
+from .normalize import price_text
+
 _NUM = r"(\d+(?:\.\d{1,2})?)"
 
 
@@ -29,7 +31,7 @@ class BargainDecision:
 
 def parse_offer(text: str, price_cents: int) -> int | None:
     """从买家话里解析出价（分）。支持 '8块'、'7.5'、'便宜10块'、'¥80'。"""
-    t = (text or "").replace("￥", "¥").replace("，", "")
+    t = price_text(text).replace("，", "")
     m = re.search(r"便宜\s*" + _NUM + r"\s*(?:元|块|块钱)?", t)
     if m:
         off = int(round(float(m.group(1)) * 100))

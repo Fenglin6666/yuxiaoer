@@ -16,6 +16,7 @@ from typing import Any
 
 from yuxiaoer.buyer.conversation.bargain import decide as bargain_decide
 from yuxiaoer.buyer.conversation.gateway import Decision, classify
+from yuxiaoer.buyer.conversation.small_model import ACTION as SMALL_ACTION, small_model
 from yuxiaoer.core import config
 from yuxiaoer.core.db import Database
 from yuxiaoer.core.events import EventBus
@@ -118,14 +119,23 @@ class BuyerAgent:
             self.db, turn_id=turn_id, session_id=session_id, agent="buyer",
             limit=config.BUYER_MAX_STEPS,
         )
-        decision = classify(text, item_title=None)
         item = await self._item(conv.get("item_id"))
+        decision = classify(text, item_title=item["title"] if item else None)
         buyer = await self.db.fetchone("SELECT * FROM buyers WHERE id=?", (conv["buyer_id"],))
         buyer = dict(buyer) if buyer else {"id": conv["buyer_id"], "nick": "买家"}
 
-        # 规则不确定时，可选 LLM 兜底分类（不影响主链路）
-        if decision.category == "unknown" and self.llm.available():
-            decision = await self._llm_classify(text, decision)
+        # 规则不确定时：先轻量分类器，再可选 LLM 兜底（不影响主链路）
+        if decision.category == "unknown":
+            prediction = small_model.predict(text)
+            if prediction is not None:
+                decision = Decision(
+                    prediction.label,
+                    SMALL_ACTION.get(prediction.label, "agent"),
+                    prediction.confidence,
+                    f"小模型：{prediction.label}（{prediction.confidence:.2f}）",
+                )
+            if decision.category == "unknown" and self.llm.available():
+                decision = await self._llm_classify(text, decision)
 
         try:
             already_sent = False
@@ -215,10 +225,26 @@ class BuyerAgent:
     async def _pre_sale(
         self, conv: dict, buyer: dict, item: dict | None, text: str, decision: Decision, tools: ToolBox
     ) -> BuyerReply:
-        if not item:
-            await self._escalate(conv, buyer, None, text, "找不到商品上下文")
-            return BuyerReply(text="这个商品的信息我这边没查到，我让店主来回复你～", handoff=True,
-                              handoff_reason="商品缺失")
+        shop_intent = bool(re.search(
+            r"(店里|推荐|别的款|其他款|别的鞋|其他鞋|还有别的|有没有别的|适合.*(?:跑|穿|用)|预算)", text
+        ))
+        if not item or shop_intent:
+            result = await tools.call(
+                "search_items", {"query": text, "limit": 5},
+                lambda: self._search_items(text, 5),
+            )
+            hits = (result.get("data") or []) if result.get("ok") else []
+            if hits:
+                return BuyerReply(
+                    text=self._candidate_text(hits), steps=tools.steps,
+                    notes=[f"商品检索命中{len(hits)}条"],
+                )
+            if not item:
+                await self._escalate(conv, buyer, None, text, "找不到商品上下文")
+                return BuyerReply(
+                    text="这个商品的信息我这边没查到，我让店主来回复你～",
+                    handoff=True, handoff_reason="商品缺失",
+                )
         await tools.call("get_item_info", {"item_id": item["id"]}, lambda: self._get_item_info(item["id"]))
         hits = await tools.call(
             "kb_search", {"query": text, "namespace": "buyer", "k": 3},
@@ -458,6 +484,18 @@ class BuyerAgent:
             return None
         row = await self.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
         return dict(row) if row else None
+
+    async def _search_items(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
+        return await self.knowledge.search_items(query, k=limit)
+
+    @staticmethod
+    def _candidate_text(items: list[dict[str, Any]]) -> str:
+        lines = []
+        for item in items[:5]:
+            stock = item.get("stock")
+            suffix = f"｜库存 {stock}" if stock is not None else ""
+            lines.append(f"· {item.get('title') or '商品'}｜¥{yuan(item.get('price_cents', 0))}{suffix}")
+        return "我找到这几件：\n" + "\n".join(lines) + "\n你想要哪一件？"
 
     async def _get_item_info(self, item_id: str) -> dict[str, Any]:
         item = await self._item(item_id)

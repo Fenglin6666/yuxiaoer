@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 
+from .normalize import contact_text, match_text, normalize_text
+
 RISK_PATTERNS = [
     "骗子", "诈骗", "敲诈", "举报你", "举报", "投诉你", "投诉到", "关店", "封号", "报警", "起诉", "威胁",
     "弄死", "打死", "傻逼", "傻B", "操你", "草你", "滚蛋", "盗版", "盗图",
@@ -77,58 +79,61 @@ def _is_pure_chitchat(text: str) -> bool:
 
 def classify(text: str, *, item_title: str | None = None) -> Decision:
     """纯规则、可解释、无 LLM 依赖。LLM 只作为 unknown 时的可选兜底。"""
-    raw = (text or "").strip()
+    raw = normalize_text(text or "")
     if not raw:
         return Decision("unknown", "silent", 1.0, "空消息", cautious=True)
+    match = match_text(raw)
+    contact = contact_text(raw)
 
-    hit = _contains_any(raw, RISK_PATTERNS)
+    hit = _contains_any(contact, RISK_PATTERNS)
     if hit:
         return Decision(
             "risk", "silent", 0.98, f"风险词命中：{hit}", risk_level="P1", cautious=False
         )
 
-    hit = _contains_any(raw, OFF_PLATFORM_PATTERNS)
+    hit = _contains_any(contact, OFF_PLATFORM_PATTERNS)
     if hit:
         return Decision(
             "off_platform", "silent", 0.95, f"站外沟通特征：{hit}", risk_level="P1"
         )
 
-    hit = _contains_any(raw, HUMAN_PATTERNS)
+    hit = _contains_any(match, HUMAN_PATTERNS)
     if hit:
         return Decision("human", "agent", 0.95, f"买家要求人工：{hit}")
 
-    hit = _contains_any(raw, AFTER_SALE_PATTERNS)
+    hit = _contains_any(match, AFTER_SALE_PATTERNS)
     if hit:
         return Decision("after_sale", "agent", 0.9, f"售后/履约特征：{hit}")
 
-    hit = _contains_any(raw, BARGAIN_PATTERNS)
+    hit = _contains_any(match, BARGAIN_PATTERNS)
     if hit:
         return Decision("bargain", "agent", 0.9, f"议价特征：{hit}")
 
-    hit = _contains_any(raw, ORDER_PATTERNS)
+    hit = _contains_any(match, ORDER_PATTERNS)
     if hit:
         return Decision("order", "agent", 0.86, f"订单特征：{hit}")
 
-    if any(k in raw for k in ("你会干什么", "能做什么", "可以做什么", "你会什么", "你能干嘛", "有什么功能")):
+    if any(k in match for k in ("你会干什么", "能做什么", "可以做什么", "你会什么", "你能干嘛", "有什么功能")):
         return Decision(
             "chitchat", "template", 0.92, "询问客服能力",
             template="我可以帮你看商品信息、库存、发货和售后～ 有具体商品或订单直接发我。",
         )
 
-    if _is_pure_chitchat(raw):
+    if _is_pure_chitchat(match):
         return Decision(
             "chitchat", "template", 0.92, "纯寒暄",
             template="我是鱼小二客服，在的～ 有喜欢哪件可以直接问我 😊",
         )
 
-    hit = _contains_any(raw, PRODUCT_HINTS)
+    hit = _contains_any(match, PRODUCT_HINTS)
     if hit:
         return Decision("pre_sale", "agent", 0.82, f"商品咨询特征：{hit}")
 
-    if item_title and any(part and part in raw for part in re.split(r"[\s（）()]+", item_title) if len(part) >= 2):
+    title = normalize_text(item_title or "")
+    if title and any(part and part in match for part in re.split(r"[\s（）()]+", title) if len(part) >= 2):
         return Decision("pre_sale", "agent", 0.75, "包含商品名关键词")
 
-    if "?" in raw or "？" in raw or "吗" in raw or "怎么" in raw:
+    if "?" in raw or "？" in raw or "吗" in match or "怎么" in match:
         return Decision("unknown", "agent", 0.55, "问句但未命中规则，进谨慎模式", cautious=True)
 
     return Decision("unknown", "agent", 0.4, "未识别，进谨慎模式", cautious=True)

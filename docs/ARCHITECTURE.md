@@ -65,6 +65,8 @@ main.py
 | `shared/toolbox.py` | 工具调用契约、步数上限、重复调用检测、落库 |
 | `shared/ports.py` | 买家域依赖的告警 / 消息窄接口 |
 | `buyer/conversation/gateway.py` | 9 类规则分类，可解释、无 LLM 依赖 |
+| `buyer/conversation/normalize.py` | NFKC / 匹配 / 站外拆字 / 价格归一化 |
+| `buyer/conversation/small_model.py` | 字符 n-gram 最近邻意图模型（规则 unknown 时兜底） |
 | `buyer/conversation/bargain.py` | 议价：解析报价、守底价、反报价 |
 | `buyer/conversation/agent.py` | 买家 Agent：分支处理、工具白名单、转人工 |
 | `buyer/conversation/ingest.py` | 入口直投：每会话 FIFO、每条消息一个 turn、去重、重启恢复 |
@@ -121,7 +123,9 @@ WS /s/vulcan
 | 8 | `pre_sale` 商品咨询 | 知识库检索 + 组装 |
 | 9 | `unknown` | 谨慎模式 |
 
-工具白名单：`get_item_info` / `get_order_status` / `create_refund_request` / `escalate_human`，步数上限 6，重复调用熔断。买家 Agent 没有发布、改价、发货权限。
+工具白名单：`get_item_info` / `kb_search` / `search_items` / `get_order_status` / `create_refund_request`，步数上限 6，重复调用熔断。买家 Agent 没有发布、改价、发货权限。
+
+规则返回 `unknown` 时：轻量字符 n-gram 模型兜底；仍不确定且 LLM 可用时，才走 `_llm_classify`。
 
 ## 6. 店主指令链路
 

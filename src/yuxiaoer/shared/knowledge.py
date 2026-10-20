@@ -25,6 +25,20 @@ from yuxiaoer.core.util import (
 )
 
 
+_STOP_WORDS = re.compile(
+    r"有没有|还有|别的|其他|这个|那个|什么|多少|怎么|可以|适合|推荐|找一|找|"
+    r"吗|呢|呀|啊|吧|的|了|我|想|要|有|和|与|请|帮|一"
+)
+
+
+def _query_keywords(query: str) -> list[str]:
+    cleaned = _STOP_WORDS.sub(" ", query or "")
+    return [
+        part for part in re.findall(r"[\u4e00-\u9fff]{1,}|[a-zA-Z0-9]{2,}", cleaned)
+        if part.strip()
+    ][:6]
+
+
 def _hash(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
@@ -282,6 +296,73 @@ class KnowledgeService:
             if len(dedup) >= k:
                 break
         return dedup
+
+    async def search_items(self, query: str, k: int = 5) -> list[dict[str, Any]]:
+        """全店商品检索：先精确短语，再 FTS 召回。"""
+        q = (query or "").strip()
+        if not q:
+            rows = await self.db.fetchall(
+                "SELECT * FROM items WHERE status IN ('live','sold_out') "
+                "ORDER BY updated_at DESC LIMIT ?",
+                (k,),
+            )
+            return [self._item_hit(dict(row), 0.0) for row in rows]
+
+        pattern = f"%{q}%"
+        rows = await self.db.fetchall(
+            "SELECT * FROM items WHERE status IN ('live','sold_out') "
+            "AND (title LIKE ? OR description LIKE ? OR category LIKE ?) "
+            "ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, updated_at DESC LIMIT ?",
+            (pattern, pattern, pattern, pattern, k),
+        )
+        if rows:
+            return [self._item_hit(dict(row), 1.0) for row in rows]
+
+        results: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        hits = await self.search(q, namespace="buyer", k=max(k * 4, 12), types=["item"])
+        for hit in hits:
+            item_id = (hit.get("meta") or {}).get("item_id")
+            if not item_id or item_id in seen:
+                continue
+            row = await self.db.fetchone("SELECT * FROM items WHERE id=?", (item_id,))
+            if not row or row["status"] in ("offline", "draft", "pending_confirm"):
+                continue
+            data = dict(row)
+            data["score"] = hit.get("score")
+            data["snippet"] = hit.get("snippet")
+            results.append(data)
+            seen.add(item_id)
+            if len(results) >= k:
+                break
+        if len(results) < k:
+            for keyword in _query_keywords(q):
+                pattern = f"%{keyword}%"
+                rows = await self.db.fetchall(
+                    "SELECT * FROM items WHERE status IN ('live','sold_out') "
+                    "AND (title LIKE ? OR description LIKE ? OR category LIKE ?) "
+                    "ORDER BY updated_at DESC LIMIT ?",
+                    (pattern, pattern, pattern, k),
+                )
+                for row in rows:
+                    if row["id"] in seen:
+                        continue
+                    data = dict(row)
+                    data["score"] = 0.5
+                    data["snippet"] = snippet(data.get("description"), 140)
+                    results.append(data)
+                    seen.add(row["id"])
+                    if len(results) >= k:
+                        break
+                if len(results) >= k:
+                    break
+        return results
+
+    @staticmethod
+    def _item_hit(item: dict[str, Any], score: float) -> dict[str, Any]:
+        item["score"] = score
+        item["snippet"] = snippet(item.get("description"), 140)
+        return item
 
     async def item_knowledge(self, item_id: str) -> dict[str, Any] | None:
         row = await self.db.fetchone(

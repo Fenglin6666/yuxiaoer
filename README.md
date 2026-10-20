@@ -109,7 +109,7 @@ src/yuxiaoer/
   static/        无构建控制台（js/app.js + js/core.js + js/pages/）
   runtime.py     服务装配与生命周期
   main.py        FastAPI 入口
-tests/           40 个单元测试
+tests/           51 个单元测试
 docs/            架构、协议、外部接口
 RUNBOOK.md       运维手册
 ```
@@ -139,7 +139,7 @@ $env:PYTHONPATH="<项目目录>\src"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-当前 40 个测试，覆盖规则分类、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手、入口直投与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
+当前 51 个测试，覆盖规则分类、归一化、轻量意图模型、商品索引、议价、中文分词、mtop 签名、WS 解帧、订单字段、控制台鉴权、通知渠道注册表、指令共享助手、入口直投与历史补拉轮转。真实 WS / 订单 / 发布需要用自己的测试账号现场验证，单测不替代联调。
 
 ## 8. 外部接口
 
