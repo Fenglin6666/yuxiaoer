@@ -171,13 +171,27 @@ function mergeEvents(events) {
   return merged;
 }
 
+function eventStatus(event) {
+  const p = event.payload || {};
+  if (event.topic === 'alert.created') {
+    const level = String(p.level || 'P2');
+    return { label: level, tone: level === 'P0' || level === 'P1' ? 'red' : 'amber' };
+  }
+  if (event.topic === 'patrol.run' || event.topic === 'account.synced') {
+    return p.ok === false ? { label: '失败', tone: 'red' } : { label: '成功', tone: 'green' };
+  }
+  const status = String(event.status || 'done');
+  return {
+    label: EVENT_STATUS[status] || status,
+    tone: ['done', 'ok', 'sent'].includes(status) ? 'green' : ['failed', 'error'].includes(status) ? 'red' : 'amber',
+  };
+}
+
 function renderEventRow(event) {
   const meta = eventMeta(event);
   const payload = JSON.stringify(event.payload || {}, null, 2);
   const facts = eventFacts(event);
-  const status = String(event.status || 'done');
-  const statusTone = ['done', 'ok', 'sent'].includes(status) ? 'green' : ['failed', 'error'].includes(status) ? 'red' : 'amber';
-  const statusLabel = EVENT_STATUS[status] || status;
+  const state = eventStatus(event);
   const count = event.count > 1 ? `<span class="event-count">×${event.count}</span>` : '';
   const last = event.count > 1 && event.last_at ? ` · 最近 ${fmtTime(event.last_at, true)}` : '';
   return `<details class="event-row">
@@ -189,7 +203,7 @@ function renderEventRow(event) {
         <span class="event-summary">${esc(eventSummary(event))}</span>
         ${last ? `<span class="event-last">${esc(last)}</span>` : ''}
       </span>
-      <span class="chip ${statusTone}">${esc(statusLabel)}</span>
+      <span class="chip ${state.tone}">${esc(state.label)}</span>
       <span class="event-chevron">${icon('arrow')}</span>
     </summary>
     <div class="event-detail">
