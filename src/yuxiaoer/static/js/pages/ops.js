@@ -64,11 +64,174 @@ export function renderOps() {
     renderOpsPanel();
   }
 
+const EVENT_GROUPS = {
+  'channel.ws_state': { group: 'channel', label: '通道状态', icon: 'plug' },
+  'account.synced': { group: 'account', label: '账号同步', icon: 'refresh' },
+  'account.event': { group: 'account', label: '账号事件', icon: 'user' },
+  'patrol.run': { group: 'patrol', label: '值守任务', icon: 'clock' },
+  'patrol.polished': { group: 'patrol', label: '擦亮完成', icon: 'spark' },
+  'patrol.schedule_updated': { group: 'patrol', label: '排期更新', icon: 'clock' },
+  'alert.created': { group: 'alert', label: '告警', icon: 'alert' },
+};
+const EVENT_FILTERS = [
+  ['focus', '重点'],
+  ['all', '全部'],
+  ['account', '账号'],
+  ['channel', '通道'],
+  ['patrol', '值守'],
+  ['alert', '告警'],
+];
+const TASK_LABELS = { heartbeat: '心跳', link_check: '链接检查', polish: '每日擦亮', daily_report: '每日日报' };
+const WS_STATES = { connected: '已连接', connecting: '连接中', disconnected: '已断开', reconnecting: '重连中', online: '在线', offline: '离线' };
+const EVENT_STATUS = { done: '完成', ok: '成功', failed: '失败', error: '错误', pending: '等待', running: '进行中', sent: '已发送', info: '记录' };
+
+function eventMeta(event) {
+  const topic = String(event.topic || 'event');
+  return EVENT_GROUPS[topic] || { group: 'other', label: topic, icon: 'activity' };
+}
+
+function eventTime(event) {
+  return fmtTime(event.created_at, true) || event.created_human || '—';
+}
+
+function eventSummary(event) {
+  const p = event.payload || {};
+  switch (event.topic) {
+    case 'channel.ws_state':
+      return `账号 ${String(p.account_id || '—').slice(-8)} · ${WS_STATES[p.state] || p.state || '状态未知'}`;
+    case 'account.synced': {
+      const c = p.counts || {};
+      const items = p.items || {};
+      const orders = p.orders || {};
+      const profile = p.profile || {};
+      const name = profile.nickname ? ` · ${profile.nickname}` : '';
+      return `商品 ${items.seen ?? c.items ?? 0} 条（新增 ${items.created ?? 0} / 更新 ${items.updated ?? 0}） · 订单 ${orders.fetched ?? c.orders ?? 0}${name}`;
+    }
+    case 'account.event':
+      return `${p.event || '账号事件'}${p.account_id ? ` · ${String(p.account_id).slice(-8)}` : ''}${p.state ? ` · ${p.state}` : ''}`;
+    case 'patrol.run':
+      return `${TASK_LABELS[p.name] || p.name || '任务'} · ${p.ok ? '成功' : '失败'}${p.manual ? ' · 手动' : ''}${p.text ? ` · ${p.text}` : ''}`;
+    case 'patrol.polished':
+      return `本轮擦亮 ${p.count ?? 0} 件商品`;
+    case 'patrol.schedule_updated':
+      return `${TASK_LABELS[p.name] || p.name || '任务'} · 下次 ${p.next_run_at ? fmtTime(p.next_run_at, true) : '待定'}`;
+    case 'alert.created':
+      return `[${p.level || 'P?'}] ${p.title || '告警'}${p.body ? ` · ${p.body}` : ''}`;
+    default:
+      return compactPayload(p);
+  }
+}
+
+function eventFacts(event) {
+  const p = event.payload || {};
+  const facts = [];
+  const push = (key, value) => { if (value !== undefined && value !== null && value !== '') facts.push([key, value]); };
+  switch (event.topic) {
+    case 'channel.ws_state': push('账号', p.account_id); push('状态', WS_STATES[p.state] || p.state); break;
+    case 'account.synced': {
+      const items = p.items || {}; const orders = p.orders || {}; const profile = p.profile || {};
+      push('昵称', profile.nickname); push('平台 ID', profile.platform_user_id);
+      push('商品', `${items.seen ?? 0} 条 / 新增 ${items.created ?? 0} / 更新 ${items.updated ?? 0}`);
+      push('订单', `${orders.fetched ?? 0} 条 / 新增 ${orders.inserted ?? 0} / 更新 ${orders.updated ?? 0}`);
+      if (Array.isArray(p.errors) && p.errors.length) push('错误', p.errors.join('；'));
+      break;
+    }
+    case 'patrol.run': push('任务', TASK_LABELS[p.name] || p.name); push('结果', p.ok ? '成功' : '失败'); push('触发', p.manual ? '手动' : '定时'); push('下次', p.next_run_at ? fmtTime(p.next_run_at, true) : ''); break;
+    case 'alert.created': push('级别', p.level); push('类型', p.kind); push('标题', p.title); push('内容', p.body); break;
+    case 'account.event': push('账号', p.account_id); push('事件', p.event); push('通道', p.channel); break;
+    case 'patrol.schedule_updated': push('任务', TASK_LABELS[p.name] || p.name); push('下次', p.next_run_at ? fmtTime(p.next_run_at, true) : ''); break;
+    default: break;
+  }
+  return facts;
+}
+
+function filterEvents(events) {
+  const filter = S.ops.eventFilter || 'focus';
+  if (filter === 'focus') {
+    return events.filter((e) => !['channel.ws_state', 'patrol.schedule_updated'].includes(e.topic));
+  }
+  if (filter === 'all') return events;
+  return events.filter((e) => eventMeta(e).group === filter);
+}
+
+function mergeEvents(events) {
+  if (S.ops.eventMerge === false) return events.map((event) => ({ ...event, count: 1 }));
+  const merged = [];
+  for (const event of events) {
+    const account = (event.payload || {}).account_id || (event.payload || {}).profile?.platform_user_id || '';
+    const key = `${event.topic}:${account}:${(event.payload || {}).state || ''}`;
+    const previous = merged[merged.length - 1];
+    if (previous && previous._key === key && event.topic === 'channel.ws_state') {
+      previous.count += 1;
+      previous.last_at = event.created_at;
+      continue;
+    }
+    merged.push({ ...event, count: 1, _key: key });
+  }
+  return merged;
+}
+
+function renderEventRow(event) {
+  const meta = eventMeta(event);
+  const payload = JSON.stringify(event.payload || {}, null, 2);
+  const facts = eventFacts(event);
+  const status = String(event.status || 'done');
+  const statusTone = ['done', 'ok', 'sent'].includes(status) ? 'green' : ['failed', 'error'].includes(status) ? 'red' : 'amber';
+  const statusLabel = EVENT_STATUS[status] || status;
+  const count = event.count > 1 ? `<span class="event-count">×${event.count}</span>` : '';
+  const last = event.count > 1 && event.last_at ? ` · 最近 ${fmtTime(event.last_at, true)}` : '';
+  return `<details class="event-row">
+    <summary>
+      <time>${esc(eventTime(event))}</time>
+      <span class="event-mark">${icon(meta.icon || 'activity')}</span>
+      <span class="event-main">
+        <span class="event-kind">${esc(meta.label)}${count}</span>
+        <span class="event-summary">${esc(eventSummary(event))}</span>
+        ${last ? `<span class="event-last">${esc(last)}</span>` : ''}
+      </span>
+      <span class="chip ${statusTone}">${esc(statusLabel)}</span>
+      <span class="event-chevron">${icon('arrow')}</span>
+    </summary>
+    <div class="event-detail">
+      ${facts.length ? `<div class="event-facts">${facts.map(([k, v]) => `<div><span>${esc(k)}</span><strong>${esc(String(v))}</strong></div>`).join('')}</div>` : ''}
+      <details class="event-raw"><summary>原始 JSON</summary><pre>${esc(payload)}</pre></details>
+    </div>
+  </details>`;
+}
+
 export function renderOpsPanel() {
     const panel = $('#opsPanel'); if (!panel) return;
     if (S.ops.tab === 'replay') { renderReplayPanel(); return; }
     if (S.ops.tab === 'eval') { renderEvalPanel(); return; }
-    panel.innerHTML = `<div class="card pad"><div class="card-head"><div><div class="card-title">${icon('activity')} 事件流</div><div class="card-sub">最近 ${S.ops.events.length} 条 · 失败会生成 P1 告警</div></div><button class="btn xs ghost" id="eventsRefresh">${icon('refresh')}</button></div><div class="event-table">${S.ops.events.map((e) => `<div class="event-row"><span class="event-topic" title="${esc(e.topic)}">${esc(e.topic)}</span><span class="event-payload">${esc(compactPayload(e.payload))}</span><span class="chip ${e.status === 'done' ? 'green' : e.status === 'failed' ? 'red' : 'amber'}">${esc(e.status)}</span><span class="event-time">${esc(e.created_human || '')}</span></div>`).join('') || emptyBlock('暂无事件', '', 'activity')}</div></div>`;
+    const filtered = filterEvents(S.ops.events);
+    const events = mergeEvents(filtered);
+    const activeFilter = S.ops.eventFilter || 'focus';
+    const failed = S.ops.events.filter((e) => ['failed', 'error'].includes(String(e.status))).length;
+    const filterHtml = EVENT_FILTERS.map(([key, label]) => {
+      const count = key === 'all' ? S.ops.events.length : key === 'focus'
+        ? S.ops.events.filter((e) => !['channel.ws_state', 'patrol.schedule_updated'].includes(e.topic)).length
+        : S.ops.events.filter((e) => eventMeta(e).group === key).length;
+      return `<button class="event-filter ${activeFilter === key ? 'active' : ''}" data-event-filter="${key}">${label}<span>${count}</span></button>`;
+    }).join('');
+    panel.innerHTML = `<div class="card pad event-panel">
+      <div class="card-head">
+        <div><div class="card-title">${icon('activity')} 事件流</div><div class="card-sub">按时间倒序 · 点击一行展开上下文 · 原始 JSON 收在详情里</div></div>
+        <div class="event-actions"><label class="event-merge"><input type="checkbox" id="eventMerge" ${S.ops.eventMerge === false ? '' : 'checked'}> 合并连续状态</label><button class="btn xs ghost" id="eventsRefresh">${icon('refresh')}</button></div>
+      </div>
+      <div class="event-overview">
+        <div><small>窗口事件</small><strong>${S.ops.events.length}</strong></div>
+        <div><small>当前视图</small><strong>${events.length}</strong></div>
+        <div><small>失败</small><strong class="${failed ? 'bad' : ''}">${failed}</strong></div>
+        <div><small>时间范围</small><strong>${S.ops.events.length ? `${esc(eventTime(S.ops.events[S.ops.events.length - 1]))} — ${esc(eventTime(S.ops.events[0]))}` : '—'}</strong></div>
+      </div>
+      <div class="event-filters">${filterHtml}</div>
+      <div class="event-table">${events.map(renderEventRow).join('') || emptyBlock('当前筛选下暂无事件', '切换筛选或刷新事件流', 'activity')}</div>
+    </div>`;
+    $$('[data-event-filter]').forEach((button) => {
+      button.onclick = () => { S.ops.eventFilter = button.dataset.eventFilter; renderOpsPanel(); };
+    });
+    const merge = $('#eventMerge');
+    if (merge) merge.onchange = () => { S.ops.eventMerge = merge.checked; renderOpsPanel(); };
     $('#eventsRefresh').onclick = async () => { S.ops.events = await api('/events?limit=60'); renderOpsPanel(); };
   }
 
