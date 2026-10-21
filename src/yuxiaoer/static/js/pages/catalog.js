@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 商品与知识（原生 ESM，无构建） */
 
-import { $, $$, ITEM_STATUS, S, api, chip, closeModal, confirmAction, emptyBlock, esc, fmtTime, icon, money, openModal, orderStatus, pad, refreshGlobal, toast } from '../core.js?v=20261021-2';
+import { $, $$, ITEM_STATUS, S, api, chip, closeModal, confirmAction, emptyBlock, esc, fmtTime, icon, money, openModal, orderStatus, pad, refreshGlobal, toast } from '../core.js?v=20261021-3';
 
   // =========================================================
   // Catalog / knowledge

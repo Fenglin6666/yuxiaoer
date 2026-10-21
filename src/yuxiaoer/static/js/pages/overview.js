@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 总览（原生 ESM，无构建） */
 
-import { $, $$, S, api, avatar, avatarClass, chip, clampPct, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, navigate, openAlertCenter, orderStatus, pad, refreshGlobal, toast } from '../core.js?v=20261021-2';
+import { $, $$, S, api, avatar, avatarClass, barChart, chip, clampPct, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, navigate, openAlertCenter, orderStatus, refreshGlobal, sessionMeta, toast } from '../core.js?v=20261021-3';
 
   // =========================================================
   // Overview
@@ -23,6 +23,12 @@ export async function refreshOverview() {
 export function renderOverview(ov, events) {
     const t = ov.today || {};
     const sys = ov.system || {};
+    const session = sessionMeta(sys.account || {});
+    const hostedLabel = session.key === 'authenticated' ? '24h 托管中'
+      : session.key === 'expiring' ? '托管中 · 登录即将过期'
+        : session.key === 'expired' ? '登录已过期 · 等待重新扫码'
+          : session.key === 'logged_out' ? '未登录 · 等待扫码'
+            : session.key === 'qr_pending' || session.key === 'scanned' ? '等待扫码登录' : '待确认登录态';
     const hour = new Date().getHours();
     const greet = hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
     const owner = (sys.settings && sys.settings.owner_name) || '店主';
@@ -32,24 +38,18 @@ export function renderOverview(ov, events) {
     const recent = ov.recent_conversations || [];
     const recentOrders = ov.recent_orders || [];
     const series = ov.series || [];
-    const maxBar = Math.max(1, ...series.map((d) => Math.max(d.conversations || 0, d.orders || 0)));
-    const chart = `<div class="bars">${series.map((d) => `
-      <div class="bar-col" title="${esc(d.date)}：咨询 ${d.conversations} · 成交 ${d.orders}">
-        <div class="bar-pair">
-          <div class="bar green" style="height:${Math.max(3, (d.conversations / maxBar) * 100)}%"></div>
-          <div class="bar coral" style="height:${Math.max(2, (d.orders / maxBar) * 100)}%"></div>
-        </div>
-        <span class="bar-label">${esc(d.label)}</span>
-      </div>`).join('')}</div>`;
+    const chart = barChart(series);
+    const weekConversations = series.reduce((sum, d) => sum + (Number(d.conversations) || 0), 0);
+    const weekOrders = series.reduce((sum, d) => sum + (Number(d.orders) || 0), 0);
 
     $('#view').innerHTML = `
       <section class="overview-hero">
         <div class="hero-copy">
-          <span class="eyebrow"><i class="dot"></i> 24h 托管中 · ${esc(sys.local_now || '')}</span>
+          <span class="eyebrow"><i class="dot ${session.dot}"></i> ${esc(hostedLabel)} · ${esc(sys.local_now || '')}</span>
           <h2>${greet}，${esc(owner)}。<br />鱼小二正在替你<em>接住每一个询单</em>。</h2>
           <p>买家消息先过入口网关，再按咨询/议价/售后分流；退款、纠纷和风险消息会通过你配置的通知渠道推送。今天的每一个会话都可在回放里追溯。</p>
           <div class="hero-actions">
-            <button class="btn" id="heroSeller">${icon('spark')} 让小二做点什么</button>
+            <button class="btn light" id="heroSeller">${icon('spark')} 让小二做点什么</button>
             <button class="btn" id="heroInbox">${icon('chat')} 看客服工作台</button>
           </div>
           <div class="hero-meta"><span>${icon('shield')} 回复率优先，不做违规刷互动</span><span>${icon('clock')} 首响保护 · 夜间免打扰</span><span>${icon('lock')} 买卖双方数据最小化</span></div>
@@ -79,7 +79,7 @@ export function renderOverview(ov, events) {
         <div class="stack">
           <div class="card chart-card">
             <div class="card-head">
-              <div><div class="card-title">${icon('activity')} 近 7 日咨询与成交</div><div class="card-sub">绿色=新咨询会话，珊瑚色=成交订单</div></div>
+              <div><div class="card-title">${icon('activity')} 近 7 日咨询与成交</div><div class="card-sub">绿色=新咨询会话，珊瑚色=成交订单 · 合计 ${weekConversations} 次咨询 / ${weekOrders} 单成交</div></div>
               <div class="legend"><span><i class="g"></i>咨询</span><span><i class="c"></i>成交</span></div>
             </div>
             ${chart}

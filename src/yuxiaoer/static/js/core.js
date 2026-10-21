@@ -132,6 +132,61 @@ export const ORDER_STATUS = {
 export const CATEGORY_LABEL = { pre_sale: '售前咨询', bargain: '议价', after_sale: '售后/履约', order: '订单查询', chitchat: '寒暄', risk: '风险消息', off_platform: '站外沟通', human: '要求人工', unknown: '未识别' };
 export const ACTION_LABEL = { silent: '静默拦截', template: '模板回复', agent: 'Agent 托管' };
 
+  // ---------------- session / channel state ----------------
+export const SESSION_META = {
+    authenticated: ['在线', '在线', 'ok', ''],
+    expiring: ['登录即将过期', '即将过期', 'warn', 'amber'],
+    expired: ['登录已过期', '已过期', 'danger', 'offline'],
+    logged_out: ['未登录', '未登录', 'danger', 'offline'],
+    qr_pending: ['等待扫码', '待扫码', 'warn', 'amber'],
+    scanned: ['已扫码待确认', '待确认', 'warn', 'amber'],
+  };
+export function sessionMeta(account) {
+    const a = account || {};
+    const key = String(a.session_state || '').toLowerCase();
+    const row = SESSION_META[key];
+    if (row) return { key, label: row[0], short: row[1], tone: row[2], dot: row[3], usable: key === 'authenticated' || key === 'expiring' };
+    if (a.state_label) return { key: key || 'unknown', label: a.state_label, short: a.state_label, tone: 'muted', dot: 'amber', usable: false };
+    if (a.status === 'online') return sessionMeta({ session_state: 'authenticated' });
+    return { key: 'unknown', label: '状态未知', short: '未知', tone: 'muted', dot: 'amber', usable: false };
+  }
+export function channelSummary(sys) {
+    const s = sys || {};
+    const channel = s.channel || {};
+    if (!s.account || !s.account.id) {
+      return { label: '未登录', tone: 'danger', dot: 'offline', title: '还没有登录闲鱼账号；点击前往账号与风控扫码' };
+    }
+    const session = sessionMeta(s.account);
+    const online = Boolean(channel.online);
+    if (session.key === 'authenticated') {
+      return online
+        ? { label: '通道在线', tone: 'ok', dot: '', title: channel.detail || '账号登录态正常' }
+        : { label: '通道离线', tone: 'danger', dot: 'offline', title: channel.detail || '账号已登录，但 WebSocket 通道离线' };
+    }
+    if (session.key === 'expiring') return { label: session.label, tone: 'warn', dot: 'amber', title: '账号仍可使用，建议尽快重新扫码续期' };
+    if (session.key === 'expired' || session.key === 'logged_out') {
+      return {
+        label: session.label, tone: 'danger', dot: 'offline',
+        title: online ? 'WebSocket 通道仍连接，但账号登录态已失效；点击前往账号与风控重新扫码' : '账号登录态已失效；点击前往账号与风控重新扫码',
+      };
+    }
+    if (session.key === 'qr_pending' || session.key === 'scanned') {
+      return { label: session.label, tone: 'warn', dot: 'amber', title: '扫码流程未完成，点击前往账号与风控' };
+    }
+    return online
+      ? { label: '通道在线', tone: 'ok', dot: '', title: channel.detail || '' }
+      : { label: '通道离线', tone: 'danger', dot: 'offline', title: channel.detail || '' };
+  }
+export function hostedState(sys) {
+    const s = sys || {};
+    if (!s.account || !s.account.id) return '需扫码';
+    const session = sessionMeta(s.account);
+    if (session.key === 'expired' || session.key === 'logged_out') return '需重新扫码';
+    if (session.key === 'qr_pending' || session.key === 'scanned') return '等待扫码';
+    if (session.key === 'expiring') return '需要关注';
+    return s.channel && s.channel.online ? '运行中' : '需处理';
+  }
+
 export function chip(text, cls = '') { return `<span class="chip ${cls}">${esc(text)}</span>`; }
 export function itemStatus(status) { const m = ITEM_STATUS[status] || [status, 'gray']; return chip(m[0], m[1]); }
 export function orderStatus(status) { const m = ORDER_STATUS[status] || [status, 'gray']; return chip(m[0], m[1]); }
@@ -139,8 +194,10 @@ export function levelChip(level) { return chip(level, level === 'P0' ? 'red' : l
 
   // ---------------- modal ----------------
 export let modalOnClose = null;
+let modalReturnFocus = null;
 export function openModal({ title, body, footer = '', wide = false, onClose = null }) {
     modalOnClose = onClose;
+    modalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const root = $('#modalRoot');
     root.innerHTML = `
       <div class="modal-backdrop" id="modalBackdrop">
@@ -153,6 +210,7 @@ export function openModal({ title, body, footer = '', wide = false, onClose = nu
     document.body.classList.add('modal-open');
     $('#modalClose').onclick = closeModal;
     $('#modalBackdrop').onclick = (e) => { if (e.target.id === 'modalBackdrop') closeModal(); };
+    requestAnimationFrame(() => { const btn = $('#modalClose'); if (btn) btn.focus({ preventScroll: true }); });
   }
 export function closeModal() {
     const root = $('#modalRoot');
@@ -161,6 +219,10 @@ export function closeModal() {
     document.body.classList.remove('modal-open');
     const cb = modalOnClose; modalOnClose = null;
     if (cb) cb();
+    if (!root.innerHTML && modalReturnFocus && modalReturnFocus.isConnected) {
+      try { modalReturnFocus.focus({ preventScroll: true }); } catch (e) { /* noop */ }
+    }
+    modalReturnFocus = null;
   }
 export function confirmAction({ title = '确认操作', message = '', confirmText = '确认', danger = false }) {
     return new Promise((resolve) => {
@@ -210,9 +272,17 @@ export function renderNav() {
       <div class="nav-group">${esc(g.label)}</div>
       ${g.items.map((it) => {
         const badge = it.badge === 'inbox' && S.handoffCount > 0 ? `<span class="nav-badge">${S.handoffCount}</span>` : '';
-        return `<a class="nav-item ${S.route === it.key ? 'active' : ''}" href="#/${it.key}">${icon(it.icon)}<span class="label">${esc(it.label)}</span>${badge}</a>`;
+        return `<a class="nav-item ${S.route === it.key ? 'active' : ''}" href="#/${it.key}" title="${esc(it.label)}" aria-label="${esc(it.label)}"${S.route === it.key ? ' aria-current="page"' : ''}>${icon(it.icon)}<span class="label">${esc(it.label)}</span>${badge}</a>`;
       }).join('')}
     `).join('');
+    const active = nav.querySelector('.nav-item.active');
+    if (active && window.matchMedia('(max-width: 720px)').matches) {
+      requestAnimationFrame(() => {
+        if (!nav.scrollWidth || nav.scrollWidth <= nav.clientWidth) return;
+        const left = active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2;
+        nav.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+      });
+    }
   }
 
 export async function refreshGlobal() {
@@ -223,13 +293,23 @@ export async function refreshGlobal() {
       S.system = sys;
       S.alerts = alerts || [];
       S.handoffCount = (handoff || []).length;
-      const online = sys.channel && sys.channel.online;
-      $('#sideDot').className = `dot ${online ? '' : 'offline'}`;
-      $('#sideStatus').textContent = online ? `${sys.channel.label || '通道'}在线` : '通道离线';
-      $('#sideHosted').textContent = online ? '运行中' : '需处理';
+      const session = sessionMeta(sys.account || {});
+      const channel = channelSummary(sys);
+      const channelOnline = Boolean(sys.channel && sys.channel.online);
+      const hasAccount = Boolean(sys.account && sys.account.id);
+      const dot = !hasAccount ? 'offline' : session.key === 'authenticated' ? (channelOnline ? '' : 'offline') : session.dot;
+      $('#sideDot').className = `dot ${dot}`;
+      $('#sideStatus').textContent = session.key === 'authenticated'
+        ? (channelOnline ? `${sys.channel.label || '通道'}在线` : '通道离线')
+        : session.key === 'expired' ? '登录已过期 · 需扫码'
+          : session.key === 'logged_out' ? '未登录 · 需扫码' : channel.label;
+      $('#sideHosted').textContent = hostedState(sys);
       const ch = $('#channelChip');
-      ch.className = `status-chip ${online ? '' : 'offline'}`;
-      ch.innerHTML = `<i class="dot ${online ? '' : 'offline'}"></i>${online ? '通道在线' : '通道离线'}`;
+      const attention = channel.tone === 'danger' || channel.tone === 'warn';
+      ch.className = `status-chip ${channel.tone === 'danger' ? 'offline' : channel.tone === 'warn' ? 'warn' : ''}${attention ? ' attention' : ''}`;
+      ch.innerHTML = `<i class="dot ${channel.dot}"></i>${esc(channel.label)}`;
+      ch.title = channel.title || '查看账号与风控';
+      ch.setAttribute('aria-label', `${channel.label}${channel.title ? `：${channel.title}` : ''}`);
       const llm = sys.llm || {};
       $('#llmChip').textContent = llm.enabled ? 'LLM 在线' : '规则模式';
       $('#llmChip').title = llm.mode || '';
@@ -263,6 +343,23 @@ export function metricCard(label, value, foot, ico, tone) {
   }
 export function emptyBlock(title, sub = '', ico = 'box') {
     return `<div class="empty"><div class="empty-ico">${icon(ico)}</div><strong>${esc(title)}</strong>${sub ? esc(sub) : ''}</div>`;
+  }
+export function barChart(series) {
+    const data = Array.isArray(series) ? series : [];
+    if (!data.length) return emptyBlock('暂无趋势数据', '产生会话与订单后会自动显示', 'activity');
+    const maxBar = Math.max(1, ...data.map((d) => Math.max(Number(d.conversations) || 0, Number(d.orders) || 0)));
+    const totalConversations = data.reduce((sum, d) => sum + (Number(d.conversations) || 0), 0);
+    const totalOrders = data.reduce((sum, d) => sum + (Number(d.orders) || 0), 0);
+    const bar = (value, cls, label) => {
+      const n = Number(value) || 0;
+      const height = n > 0 ? Math.max(4, Math.round((n / maxBar) * 100)) : 0;
+      return `<div class="bar ${cls}${n > 0 ? '' : ' is-zero'}" style="height:${height}%"${n > 0 ? ` data-v="${esc(`${label} ${n}`)}"` : ''}></div>`;
+    };
+    return `<div class="bars" role="img" aria-label="近 ${data.length} 日趋势：咨询 ${totalConversations} 次，成交 ${totalOrders} 单">${data.map((d) => `
+      <div class="bar-col" title="${esc(`${d.date || ''}：咨询 ${d.conversations || 0} · 成交 ${d.orders || 0}`)}">
+        <div class="bar-pair">${bar(d.conversations, 'green', '咨询')}${bar(d.orders, 'coral', '成交')}</div>
+        <span class="bar-label">${esc(d.label || '')}</span>
+      </div>`).join('')}</div>`;
   }
 export function compactPayload(p) {
     try { const s = JSON.stringify(p); return s.length > 110 ? s.slice(0, 108) + '…' : s; } catch (e) { return ''; }

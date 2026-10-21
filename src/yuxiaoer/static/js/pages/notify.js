@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 通知渠道（原生 ESM，无构建） */
 
-import { $, S, api, chip, closeModal, confirmAction, emptyBlock, esc, icon, levelChip, openModal, pad, sleep, toast } from '../core.js?v=20261021-2';
+import { $, S, api, chip, closeModal, confirmAction, emptyBlock, esc, icon, levelChip, openModal, pad, sleep, toast } from '../core.js?v=20261021-3';
 
   // =========================================================
   // Notification channels

@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 订单履约（原生 ESM，无构建） */
 
-import { $, $$, S, api, closeModal, confirmAction, emptyBlock, esc, every, fmtTime, icon, money, openModal, orderStatus, pad, refreshGlobal, toast } from '../core.js?v=20261021-2';
+import { $, $$, S, api, closeModal, confirmAction, emptyBlock, esc, every, fmtTime, icon, money, openModal, orderStatus, pad, refreshGlobal, toast } from '../core.js?v=20261021-3';
 
   // =========================================================
   // Orders
@@ -13,7 +13,7 @@ export async function pageOrders() {
       </div>
       <div class="order-stats" id="orderStats"></div>
       <div class="card pad">
-        <div class="card-head"><div class="filter-bar" id="orderFilters">
+        <div class="card-head order-toolbar"><div class="filter-bar" id="orderFilters">
           <button class="filter-pill active" data-status="all">全部</button>
           <button class="filter-pill" data-status="paid">待发货</button>
           <button class="filter-pill" data-status="refund_open">退款中</button>

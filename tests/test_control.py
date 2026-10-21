@@ -12,7 +12,9 @@ from yuxiaoer.control.scheduler import jittered_time
 
 class RegistryTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp = Path(tempfile.mkdtemp(prefix="yx-control-")) / "accounts.json"
+        self._tmpdir = tempfile.TemporaryDirectory(prefix="yx-control-")
+        self.addCleanup(self._tmpdir.cleanup)
+        self.tmp = Path(self._tmpdir.name) / "accounts.json"
         self.registry = ShopRegistry(self.tmp)
 
     def test_seed_default(self) -> None:

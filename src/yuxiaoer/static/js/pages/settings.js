@@ -1,11 +1,12 @@
 /* 鱼小二控制台 · 设置（原生 ESM，无构建） */
 
-import { $, $$, S, api, chip, esc, fmtTime, icon, navigate, pad, refreshGlobal, toast } from '../core.js?v=20261021-2';
+import { $, $$, S, api, chip, esc, fmtTime, icon, navigate, pad, refreshGlobal, sessionMeta, toast } from '../core.js?v=20261021-3';
 
 export async function pageSettings() {
     const [data, items] = await Promise.all([api('/settings'), api('/items')]);
     S.settings.data = data; S.settings.items = items || [];
     const v = data.values || {}; const sys = data.system || {}; const llm = data.llm || {};
+    const login = sessionMeta(sys.account || {});
     const editable = data.editable || [];
     const bool = (val) => String(val) === '1' || String(val) === 'true' || String(val) === 'on';
     $('#view').innerHTML = `
@@ -48,8 +49,9 @@ export async function pageSettings() {
         <div class="stack">
           <div class="card pad">
             <div class="card-head"><div><div class="card-title">${icon('activity')} 系统状态</div><div class="card-sub">进程内实时快照</div></div></div>
-            <div class="sys-row"><span>通道</span><strong>${esc(sys.channel?.label || '—')} · ${sys.channel?.online ? '在线' : '离线'}</strong></div>
+            <div class="sys-row"><span>通道</span><strong>${esc(sys.channel?.label || '—')} · ${sys.channel?.online ? '已连接' : '离线'}</strong></div>
             <div class="sys-row"><span>账号</span><strong>${sys.accounts_count || 0} 个 / 当前 ${esc(sys.account?.nickname || '—')}</strong></div>
+            <div class="sys-row"><span>登录态</span><strong style="color:${login.tone === 'danger' ? 'var(--danger)' : login.tone === 'warn' ? 'var(--amber)' : 'var(--brand)'}">${esc(login.label)}</strong></div>
             <div class="sys-row"><span>风控</span><strong>${sys.risk?.open ? '熔断中 · ' + esc(sys.risk.until_human) : '正常'}</strong></div>
             <div class="sys-row"><span>通知渠道</span><strong>${sys.notify?.enabled || 0} 启用 · ${sys.notify?.sent || 0} 送达</strong></div>
             <div class="sys-row"><span>账号心跳</span><strong>${esc(sys.account?.last_heartbeat_at ? fmtTime(sys.account.last_heartbeat_at, true) : '—')}</strong></div>

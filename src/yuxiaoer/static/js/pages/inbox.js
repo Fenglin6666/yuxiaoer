@@ -1,7 +1,10 @@
 /* 鱼小二控制台 · 客服工作台（原生 ESM，无构建） */
 
-import { $, $$, ACTION_LABEL, CATEGORY_LABEL, ITEM_STATUS, S, api, avatar, avatarClass, chip, clearTimers, emptyBlock, esc, every, icon, money, navigate, nl2br, orderStatus, refreshGlobal, toast } from '../core.js?v=20261021-2';
-import { accountTabsHTML, bindAccountTabs } from '../hub.js?v=20261021-2';
+import { $, $$, ACTION_LABEL, CATEGORY_LABEL, ITEM_STATUS, S, api, avatar, avatarClass, chip, clearTimers, emptyBlock, esc, every, icon, money, navigate, nl2br, orderStatus, refreshGlobal, sessionMeta, toast } from '../core.js?v=20261021-3';
+import { accountTabsHTML, bindAccountTabs } from '../hub.js?v=20261021-3';
+
+function loginState() { return sessionMeta(S.system && S.system.account ? S.system.account : {}); }
+function loginPaused() { return ['expired', 'logged_out'].includes(loginState().key); }
 
   // =========================================================
   // Buyer experience
@@ -29,6 +32,7 @@ export async function pageInbox() {
         </aside>
         <section class="thread-pane">
           <div id="threadHead"></div>
+          <div class="thread-banner" id="threadBanner"></div>
           <div class="thread-body" id="threadBody"></div>
           <div class="thread-foot">
             <div class="reply-box"><textarea id="manualInput" rows="1" placeholder="以店主身份回复，接管后将暂停自动回复…"></textarea><button class="btn primary" id="manualSend">${icon('send')} 发送</button></div>
@@ -82,7 +86,7 @@ export function renderConvList() {
           <div class="c-top"><strong>${esc(c.buyer_nick || '买家')}</strong><span class="c-time">${esc(c.last_human || '')}</span></div>
           <div class="c-item">${esc(c.item_title || '—')}</div>
           <div class="c-msg">${esc(c.last_text || '暂无消息')}</div>
-          <div class="c-tags">${c.handoff ? chip('待人工', 'red') : chip('托管中', 'green')}${c.unread_for_owner ? chip(`${c.unread_for_owner} 未读`, 'amber') : ''}</div>
+          <div class="c-tags">${c.handoff ? chip('待人工', 'red') : loginPaused() ? chip('登录已过期', 'red') : chip('托管中', 'green')}${c.unread_for_owner ? chip(`${c.unread_for_owner} 未读`, 'amber') : ''}</div>
         </div>
         ${c.unread_for_owner ? '<i class="unread"></i>' : ''}
       </div>`).join('');
@@ -102,6 +106,7 @@ export async function loadConversation(id, withBusy = true) {
 
 export function renderEmptyThread() {
     $('#threadHead').innerHTML = '';
+    $('#threadBanner').innerHTML = '';
     $('#threadBody').innerHTML = emptyBlock('选择一个会话', '左侧会话会实时更新', 'chat');
     $('#ctxPane').innerHTML = '';
   }
@@ -113,7 +118,7 @@ export function renderThreadHead() {
     const c = d.conversation; const b = d.buyer || {}; const it = d.item;
     head.innerHTML = `<div class="thread-head">
       ${avatar(b.nick || '买家', avatarClass(b.nick))}
-      <div class="t-main"><strong>${esc(b.nick || '买家')} ${c.handoff ? chip('人工接管', 'red') : chip('托管中', 'green')}</strong><small>${esc(it ? it.title : '无商品')} · 会话 ${esc(c.id)}</small></div>
+      <div class="t-main"><strong>${esc(b.nick || '买家')} ${c.handoff ? chip('人工接管', 'red') : loginPaused() ? chip('登录已过期', 'red') : chip('托管中', 'green')}</strong><small>${esc(it ? it.title : '无商品')} · 会话 ${esc(c.id)}</small></div>
       <div class="btn-row">
         ${c.handoff ? `<button class="btn sm soft" id="resumeBtn">${icon('rotate')} 恢复自动</button>` : `<button class="btn sm" id="takeoverBtn">${icon('user')} 接管</button>`}
         <button class="btn sm ghost" id="threadReplay">${icon('activity')} 回放</button>
@@ -127,11 +132,15 @@ export function renderThreadHead() {
 export function renderThreadBody() {
     const body = $('#threadBody'); const d = S.inbox.detail;
     if (!body) return;
-    if (!d) { body.innerHTML = emptyBlock('选择一个会话', '', 'chat'); return; }
-    const msgs = d.messages || [];
+    if (!d) { const bannerEl = $('#threadBanner'); if (bannerEl) bannerEl.innerHTML = ''; body.innerHTML = emptyBlock('选择一个会话', '', 'chat'); return; }    const msgs = d.messages || [];
     const c = d.conversation;
     const banner = c.handoff ? `<div class="notice red" style="margin-bottom:12px">${icon('user')} 已转人工（${esc(c.handoff_reason || '')}）。自动回复暂停，你可以直接在下方回复。</div>` : '';
     const sched = d.scheduled_reply ? `<div class="scheduled-note">${icon('clock')} 已排期 ${esc(d.scheduled_reply.send_after_human)} 发送：${esc(d.scheduled_reply.text)}（${esc(d.scheduled_reply.reason || '')}）</div>` : '';
+    const login = loginState();
+    const paused = ['expired', 'logged_out'].includes(login.key);
+    const loginBanner = paused ? `<div class="notice red">${icon('alert')} 账号${esc(login.label)}，自动回复与消息收发已暂停；请到「账号与风控」重新扫码。</div>` : '';
+    const bannerEl = $('#threadBanner');
+    if (bannerEl) bannerEl.innerHTML = loginBanner;
     body.innerHTML = `${banner}${sched}${msgs.length ? msgs.map((m) => {
       const out = m.direction === 'out';
       const role = m.role || (out ? 'agent' : 'buyer');
@@ -142,8 +151,14 @@ export function renderThreadBody() {
       </div>`;
     }).join('') : emptyBlock('还没有消息', '买家发消息后会出现在这里', 'chat')}`;
     body.scrollTop = body.scrollHeight;
-    $('#manualInput').disabled = false;
-    $('#threadHint').textContent = c.handoff ? '人工接管中' : '自动托管中';
+    const input = $('#manualInput');
+    const send = $('#manualSend');
+    if (input) {
+      input.disabled = paused;
+      input.placeholder = paused ? `账号${login.label}，重新扫码后才能发送` : '以店主身份回复，接管后将暂停自动回复…';
+    }
+    if (send) send.disabled = paused;
+    $('#threadHint').textContent = paused ? '登录已过期' : c.handoff ? '人工接管中' : '自动托管中';
   }
 
 export function renderContext() {

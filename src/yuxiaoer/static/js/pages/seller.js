@@ -1,7 +1,7 @@
 /* 鱼小二控制台 · 让小二做点什么（原生 ESM，无构建） */
 
-import { $, $$, S, api, avatar, chip, clearTimers, closeModal, emptyBlock, esc, every, fmtTime, icon, money, navigate, nl2br, openModal, orderStatus, refreshGlobal, toast } from '../core.js?v=20261021-2';
-import { accountTabsHTML, bindAccountTabs } from '../hub.js?v=20261021-2';
+import { $, $$, S, api, avatar, chip, clearTimers, closeModal, emptyBlock, esc, every, fmtTime, icon, money, navigate, nl2br, openModal, orderStatus, refreshGlobal, sessionMeta, toast } from '../core.js?v=20261021-3';
+import { accountTabsHTML, bindAccountTabs } from '../hub.js?v=20261021-3';
 
   // =========================================================
   // Seller agent chat
@@ -17,7 +17,7 @@ export async function pageSeller() {
         <div class="seller-chat">
           <div class="seller-head">
             <span class="s-avatar">鱼</span>
-            <div><strong>鱼小二 · 你的店长 Agent</strong><small><i class="dot" style="width:5px;height:5px"></i> 可对话 · 会先确认再动平台</small></div>
+            <div><strong>鱼小二 · 你的店长 Agent</strong><small id="sellerHeadStatus"><i class="dot" style="width:5px;height:5px"></i> 可对话 · 会先确认再动平台</small></div>
             <div class="head-actions"></div>
           </div>
           <div class="seller-body" id="sellerBody"></div>
@@ -70,8 +70,27 @@ export async function loadSeller(scroll = false) {
 export function renderSellerMessages(scroll = false) {
     const body = $('#sellerBody'); if (!body) return;
     const msgs = S.seller.messages || [];
-    if (!msgs.length) { body.innerHTML = emptyBlock('还没有对话', '先说「发布设置 …」，再让小二十架上架；也可以问订单/日报/擦亮', 'chat'); return; }
-    body.innerHTML = msgs.map((m) => {
+    const login = sessionMeta(S.system && S.system.account ? S.system.account : {});
+    const paused = ['expired', 'logged_out'].includes(login.key);
+    const headStatus = $('#sellerHeadStatus');
+    if (headStatus) headStatus.innerHTML = paused
+      ? `<i class="dot offline" style="width:5px;height:5px"></i> ${esc(login.label)} · 平台操作暂不可用`
+      : '<i class="dot" style="width:5px;height:5px"></i> 可对话 · 会先确认再动平台';
+    const loginNotice = paused
+      ? `<div class="notice red" style="margin-bottom:12px">${icon('alert')} 账号${esc(login.label)}，平台写操作与消息发送会失败；请到「账号与风控」重新扫码。</div>`
+      : '';
+    const input = $('#sellerInput');
+    if (input) {
+      input.disabled = paused;
+      input.placeholder = paused ? `账号${login.label}，重新扫码后才能发送` : '发图片 + 描述，例如：9.9 元虚拟资料，拍下自动发';
+    }
+    const sendBtn = $('#sellerSend');
+    if (sendBtn) sendBtn.disabled = paused;
+    const attachBtn = $('#sellerAttach');
+    if (attachBtn) attachBtn.disabled = paused;
+    $$('.seller-quick [data-send]').forEach((b) => { b.disabled = paused; });
+    if (!msgs.length) { body.innerHTML = loginNotice + emptyBlock('还没有对话', '先说「发布设置 …」，再让小二十架上架；也可以问订单/日报/擦亮', 'chat'); return; }
+    body.innerHTML = loginNotice + msgs.map((m) => {
       const card = m.meta && m.meta.card;
       if (card) return renderSellerCard(m, card);
       const owner = m.role === 'owner' || m.direction === 'in';

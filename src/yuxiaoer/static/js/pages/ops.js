@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 观测/回放/评测（原生 ESM，无构建） */
 
-import { $, $$, CATEGORY_LABEL, S, api, chip, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, nl2br, pad, toast } from '../core.js?v=20261021-2';
+import { $, $$, CATEGORY_LABEL, S, api, barChart, chip, compactPayload, emptyBlock, esc, every, fmtTime, icon, metricCard, money, nl2br, pad, sessionMeta, toast } from '../core.js?v=20261021-3';
 
   // =========================================================
   // Ops / replay / eval
@@ -27,22 +27,24 @@ export async function pageOps() {
 
 export function renderOps() {
     const m = S.ops.metrics || {}; const t = m.today || {}; const h = m.health || {};
+    const session = sessionMeta(S.system && S.system.account ? S.system.account : {});
     const series = m.series || [];
-    const maxBar = Math.max(1, ...series.map((d) => Math.max(d.conversations || 0, d.orders || 0)));
-    const chart = `<div class="bars">${series.map((d) => `<div class="bar-col" title="${esc(d.date)}"><div class="bar-pair"><div class="bar green" style="height:${Math.max(3, (d.conversations / maxBar) * 100)}%"></div><div class="bar coral" style="height:${Math.max(2, (d.orders / maxBar) * 100)}%"></div></div><span class="bar-label">${esc(d.label)}</span></div>`).join('')}</div>`;
+    const chart = barChart(series);
+    const weekConversations = series.reduce((sum, d) => sum + (Number(d.conversations) || 0), 0);
+    const weekOrders = series.reduce((sum, d) => sum + (Number(d.orders) || 0), 0);
     const view = $('#view');
     view.innerHTML = `
       <div class="page-head"><div><h2>指标、轨迹与回归</h2><p>L0 系统活着吗 · L1 客服称职吗 · L2 生意变好了吗。北极星：询单转化率。</p></div><div class="btn-row"><button class="btn sm ghost" id="opsRefresh">${icon('refresh')} 刷新</button></div></div>
       <div class="ops-metrics">
-        ${metricCard('L0 · 通道', (S.system && S.system.channel && S.system.channel.online) ? '在线' : '离线', `事件积压 ${S.system?.events?.backlog ?? 0} · 队列 ${S.system?.queue?.depth ?? 0}`, 'activity', '')}
+        ${metricCard('L0 · 通道', (S.system && S.system.channel && S.system.channel.online) ? '在线' : '离线', `登录态 ${session.short} · 事件积压 ${S.system?.events?.backlog ?? 0} · 队列 ${S.system?.queue?.depth ?? 0}`, 'activity', '')}
         ${metricCard('L0 · 工具错误率', `${h.tool_error_rate || 0}%`, `${h.tool_calls || 0} 次调用 / 24h`, 'plug', 'amber')}
         ${metricCard('L1 · 首响 P95', `${t.first_response_p95 || 0}s`, `P50 ${t.first_response_p50 || 0}s · 回复率 ${t.answer_rate || 0}%`, 'clock', 'coral')}
         ${metricCard('L2 · 询单转化', `${t.conversion_rate || 0}%`, `${t.paid_orders || 0} 单 · GMV ${money(t.gmv || 0)}`, 'spark', 'purple')}
       </div>
       <div class="overview-grid">
-        <div class="card chart-card"><div class="card-head"><div><div class="card-title">${icon('activity')} 7 日趋势</div><div class="card-sub">会话 vs 成交 · 单位：个</div></div><div class="legend"><span><i class="g"></i>咨询</span><span><i class="c"></i>成交</span></div></div>${chart}</div>
+        <div class="card chart-card"><div class="card-head"><div><div class="card-title">${icon('activity')} 7 日趋势</div><div class="card-sub">会话 vs 成交 · 合计 ${weekConversations} 次咨询 / ${weekOrders} 单成交</div></div><div class="legend"><span><i class="g"></i>咨询</span><span><i class="c"></i>成交</span></div></div>${chart}</div>
         <div class="card pad"><div class="card-head"><div><div class="card-title">${icon('shield')} 运行健康</div><div class="card-sub">进程内服务与护栏</div></div></div>
-          <div class="sys-row"><span>账号在线</span><strong>${(S.system && S.system.channel && S.system.channel.online) ? '在线' : '离线'}</strong></div>
+          <div class="sys-row"><span>账号登录态</span><strong style="color:${session.tone === 'danger' ? 'var(--danger)' : session.tone === 'warn' ? 'var(--amber)' : 'var(--brand)'}">${esc(session.label)}</strong></div>
           <div class="sys-row"><span>LLM 模式</span><strong>${esc(S.system?.llm?.mode || '—')}</strong></div>
           <div class="sys-row"><span>工具错误率</span><strong>${h.tool_error_rate || 0}%</strong></div>
           <div class="sys-row"><span>LLM 失败率</span><strong>${h.llm_fail_rate || 0}%</strong></div>

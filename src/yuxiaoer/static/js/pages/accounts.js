@@ -1,6 +1,6 @@
 /* 鱼小二控制台 · 账号与风控（原生 ESM，无构建） */
 
-import { $, S, api, avatar, chip, closeModal, compactPayload, confirmAction, emptyBlock, esc, every, icon, openModal, pad, refreshGlobal, toast } from '../core.js?v=20261021-2';
+import { $, S, api, avatar, chip, closeModal, compactPayload, confirmAction, emptyBlock, esc, every, icon, openModal, pad, refreshGlobal, toast } from '../core.js?v=20261021-3';
 
   // =========================================================
   // Accounts / session keeper / risk

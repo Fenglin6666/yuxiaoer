@@ -1,6 +1,6 @@
 /* 多账号切换器：嵌在客服工作台 / 让小二做点什么页面顶部，不单独做页面。 */
 
-import { $, S, closeModal, esc, openModal, toast } from './core.js?v=20261021-2';
+import { $, S, closeModal, esc, openModal, sessionMeta, toast } from './core.js?v=20261021-3';
 
 async function hubFetch(path, options = {}) {
   const opts = { method: options.method || 'GET', headers: {} };
@@ -14,11 +14,20 @@ async function hubFetch(path, options = {}) {
   return data;
 }
 
-export function accountLabel(item) {
+function accountState(item) {
   const account = item.account || {};
-  const who = account.nickname || account.platform_user_id || '未登录';
-  const state = item.running ? (item.health && item.health.online ? '在线' : '启动中') : '已停止';
-  return `${item.name} · ${who} · ${state}`;
+  const session = sessionMeta(account);
+  const online = Boolean(item.running && item.health && item.health.online);
+  if (!account.id) return { account, session, online, dot: 'offline', short: item.running ? '未登录' : '已停止', detail: item.running ? '未登录' : '已停止' };
+  const short = session.key === 'authenticated' ? (online ? '在线' : item.running ? '启动中' : '已停止') : session.short;
+  const dot = session.key === 'authenticated' ? (online ? '' : 'offline') : session.dot;
+  return { account, session, online, dot, short, detail: session.key === 'authenticated' ? short : session.label };
+}
+
+export function accountLabel(item) {
+  const state = accountState(item);
+  const who = state.account.nickname || state.account.platform_user_id || '未登录';
+  return `${item.name} · ${who} · ${state.detail}`;
 }
 
 async function loadAccounts() {
@@ -31,55 +40,78 @@ function selectAccount(accounts) {
   if (!accounts.length) return;
   const exists = accounts.some((item) => item.id === S.accountId);
   if (!exists) {
-    const preferred = accounts.find((item) => item.running && item.health && item.health.online) || accounts[0];
+    const preferred = accounts.find((item) => item.running && item.health && item.health.online && sessionMeta(item.account).usable)
+      || accounts.find((item) => sessionMeta(item.account).key === 'authenticated')
+      || accounts[0];
     S.accountId = preferred.id;
     localStorage.setItem('yuxiaoer_account', S.accountId);
   }
-  const selected = accounts.find((item) => item.id === S.accountId);
-  if (selected) $('#shopName').textContent = selected.name;
 }
 
 export function accountTabsHTML() {
   const accounts = S.hubAccounts || [];
   if (!accounts.length) {
-    return '<div class="account-tabs"><span class="muted">还没有闲鱼账号</span><button class="account-tab add" data-account-manage>+ 添加账号</button></div>';
+    return '<div class="account-tabs"><span class="account-tabs-label">账号</span><span class="muted">还没有闲鱼账号</span><button class="account-tab add" data-account-manage>+ 添加账号</button></div>';
   }
   const tabs = accounts.map((item) => {
     const active = item.id === S.accountId;
-    const account = item.account || {};
-    const online = item.running && item.health && item.health.online;
-    const who = account.nickname || account.platform_user_id || '未登录';
+    const state = accountState(item);
+    const who = state.session.key === 'authenticated'
+      ? (state.account.nickname || state.account.platform_user_id || '闲鱼账号')
+      : '未登录';
     return `<button class="account-tab ${active ? 'active' : ''}" data-account-id="${esc(item.id)}">
-      <b>${esc(item.name)}</b><span>${esc(who)} · ${online ? '在线' : item.running ? '启动中' : '已停止'}</span>
+      <span class="at-title"><i class="dot ${state.dot}"></i><b>${esc(item.name)}</b></span><span class="account-state ${state.dot}">${esc(who)} · ${esc(state.short)}</span>
     </button>`;
   }).join('');
-  return `<div class="account-tabs">${tabs}<button class="account-tab add" data-account-manage>+ 账号</button></div>`;
+  return `<div class="account-tabs"><span class="account-tabs-label">账号</span>${tabs}<button class="account-tab add" data-account-manage>+ 账号</button></div>`;
 }
+
+const tabReloads = new WeakMap();
 
 export function bindAccountTabs(root, reload) {
   if (!root) return;
-  root.querySelectorAll('[data-account-id]').forEach((button) => {
-    button.onclick = async () => {
-      const id = button.dataset.accountId;
+  tabReloads.set(root, reload);
+  if (root.dataset.accountTabsBound === '1') return;
+  root.dataset.accountTabsBound = '1';
+  root.addEventListener('click', async (event) => {
+    const tab = event.target.closest('[data-account-id]');
+    if (tab) {
+      const id = tab.dataset.accountId;
       if (id === S.accountId) return;
       S.accountId = id;
       localStorage.setItem('yuxiaoer_account', id);
-      await reload();
-    };
+      const fn = tabReloads.get(root);
+      if (fn) {
+        try { await fn(); } catch (err) { toast(err.message, 'error'); }
+      }
+      return;
+    }
+    if (event.target.closest('[data-account-manage]')) {
+      openManager().catch((err) => toast(err.message, 'error'));
+    }
   });
-  const manage = root.querySelector('[data-account-manage]');
-  if (manage) manage.onclick = () => openManager().catch((err) => toast(err.message, 'error'));
+}
+
+export async function refreshHub() {
+  try {
+    const accounts = await loadAccounts();
+    selectAccount(accounts);
+    const html = accountTabsHTML();
+    ['#inboxAccounts', '#sellerAccounts'].forEach((selector) => {
+      const root = $(selector);
+      if (root && root.innerHTML !== html) root.innerHTML = html;
+    });
+  } catch (_) { /* 账号状态刷新失败时保留当前界面 */ }
 }
 
 async function openManager() {
   const accounts = await loadAccounts();
   const rows = accounts.map((item) => {
-    const account = item.account || {};
-    const online = item.running && item.health && item.health.online;
+    const state = accountState(item);
     return `<div class="hub-row" style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)">
       <div style="flex:1;min-width:0">
         <b>${esc(item.name)}</b> <span class="muted">${esc(item.id)} · :${item.port}</span>
-        <div class="muted">${esc(account.nickname || '未登录')} · ${online ? '在线' : item.running ? '启动中' : '已停止'}${item.restarts ? ` · 重启${item.restarts}次` : ''}</div>
+        <div class="muted"><i class="dot ${state.dot}" style="margin-right:5px"></i>${esc(state.account.nickname || '未登录')} · ${esc(state.detail)}${item.restarts ? ` · 重启${item.restarts}次` : ''}</div>
       </div>
       <button class="btn ghost" data-hub-action="select" data-id="${esc(item.id)}">切换</button>
       <button class="btn ghost" data-hub-action="login" data-id="${esc(item.id)}">扫码</button>

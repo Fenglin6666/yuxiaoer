@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f3f5f8" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="鱼小二 · 闲鱼多账号托管控制台：客服工作台、商品与知识、订单履约与风控观测。" />
   <title>鱼小二 · 多账号托管</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css" />
@@ -32,7 +34,7 @@
 
       <div class="sidebar-foot">
         <div class="mini-status">
-          <div class="row"><span>托管状态</span><strong id="sideHosted">运行中</strong></div>
+          <div class="row"><span>托管状态</span><strong id="sideHosted">检查中</strong></div>
           <div class="row"><span>版本</span><span>R2 · v0.3.1 真实通道</span></div>
         </div>
         <p class="disclaimer">原生协议存在平台风险<br />请使用小号并控制频率</p>
@@ -46,7 +48,7 @@
           <p id="pageSubtitle">鱼小二正在替你值班</p>
         </div>
         <div class="topbar-actions">
-          <span class="status-chip" id="channelChip"><i class="dot"></i>通道在线</span>
+          <button type="button" class="status-chip" id="channelChip" title="查看账号与风控"><i class="dot amber"></i>状态读取中</button>
           <span class="status-chip subtle" id="llmChip">规则模式</span>
           <span class="status-chip offline hidden" id="riskChip">风控熔断</span>
           <button class="icon-btn" id="manageAccountsTop" title="账号管理" aria-label="账号管理">
@@ -66,6 +68,6 @@
   <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
   <div id="modalRoot"></div>
 
-  <script type="module" src="/static/js/app.js?v=20261021-2"></script>
+  <script type="module" src="/static/js/app.js?v=20261021-3"></script>
 </body>
 </html>

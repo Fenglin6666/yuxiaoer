@@ -16,7 +16,9 @@ from yuxiaoer.control.main import app
 
 class ControlApiTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp = Path(tempfile.mkdtemp(prefix="yx-hub-api-"))
+        self._tmpdir = tempfile.TemporaryDirectory(prefix="yx-hub-api-")
+        self.addCleanup(self._tmpdir.cleanup)
+        self.tmp = Path(self._tmpdir.name)
         os.environ["YUXIAOER_CONTROL_DIR"] = str(self.tmp)
         os.environ["YUXIAOER_CONTROL_AUTOSTART"] = "0"
 

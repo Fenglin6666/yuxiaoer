@@ -16,7 +16,9 @@ ITEM_SQL = """INSERT INTO items(id,title,description,price_cents,floor_price_cen
 
 class ItemSearchTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.tmp = Path(tempfile.mkdtemp(prefix="yx-search-")) / "t.db"
+        self._tmpdir = tempfile.TemporaryDirectory(prefix="yx-search-")
+        self.addCleanup(self._tmpdir.cleanup)
+        self.tmp = Path(self._tmpdir.name) / "t.db"
         self.db = Database(self.tmp)
         await self.db.connect()
         await self.db.execute(
