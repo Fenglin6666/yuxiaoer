@@ -35,7 +35,13 @@
 
 ```powershell
 cd <项目目录>
-.\run.ps1
+.\run.cmd
+```
+
+`run.cmd` 不依赖 PowerShell 执行策略，推荐直接用它。若坚持用 `run.ps1`：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
 首次运行会自动创建 `.venv` 并安装依赖。启动后打开：

@@ -6,7 +6,13 @@
 
 ```powershell
 cd <项目目录>
-.\run.ps1
+.\run.cmd
+```
+
+`run.cmd` 不需要修改 PowerShell 执行策略；如果要用 `run.ps1`：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
 手动启动：
@@ -41,7 +47,7 @@ Invoke-WebRequest http://127.0.0.1:8787/api/status
 - 注册表：`data/control/accounts.json`；
 - 日志：`data/control/logs/<id>.log`；
 - 控制台负责启动/停止/重启、10 秒健康检查、异常重启、扫码登录、排期写回、告警/日报汇总；
-- 没有单独的 `run-control.ps1`，`run.ps1` 就是唯一入口。
+- 没有单独的 `run-control.ps1`，`run.cmd`（或带 Bypass 的 `run.ps1`）就是唯一入口。
 
 ## 2. 首次启动
 
